@@ -22,14 +22,35 @@ export interface OpcionesCaptura {
   preload: string;
 }
 
+/**
+ * Hace clic en la pestaña (chip) que dice ese texto.
+ *
+ * Se busca por el texto visible y no por posición: si mañana se agrega otra
+ * pestaña, la captura sigue apuntando a la correcta en vez de sacar la foto
+ * equivocada sin avisar.
+ */
+const clicEnPestana = (texto: string): string => `(() => {
+  const b = [...document.querySelectorAll('button')].find(
+    (x) => x.textContent.trim() === ${JSON.stringify(texto)},
+  );
+  if (!b) return 'no se encontro la pestaña ${texto}';
+  b.click();
+  return 'ok';
+})()`;
+
 /** Pantallas a recorrer: clave del menú + nombre del archivo. */
 const PANTALLAS: Array<{ clave: string; archivo: string; antes?: string }> = [
   { clave: 'panel', archivo: '1-panel' },
   { clave: 'stock', archivo: '2-articulos-y-stock' },
+  // Las dos pestañas nuevas de la v5, dentro de la misma pantalla de stock.
+  { clave: 'stock', archivo: '2b-que-comprar', antes: clicEnPestana('Qué comprar') },
+  { clave: 'stock', archivo: '2c-conteo-fisico', antes: clicEnPestana('Conteo físico') },
   { clave: 'ingresos', archivo: '3-ingresos' },
   { clave: 'salidas', archivo: '4-salidas' },
   { clave: 'sucursales', archivo: '5-sucursales' },
-  { clave: 'reportes', archivo: '6-reportes' },
+  // Reportes abre en el panel nuevo de valor e inversión.
+  { clave: 'reportes', archivo: '6-reportes-valor-e-inversion' },
+  { clave: 'reportes', archivo: '6b-reportes-consumo', antes: clicEnPestana('Consumo por sucursal') },
   { clave: 'maestro', archivo: '7-maestro-bloqueado' },
   // La misma pantalla, ya desbloqueada con la clave de fábrica.
   {
@@ -84,7 +105,11 @@ async function esperar(ms: number): Promise<void> {
 /** Saca todas las capturas y cierra la aplicación. */
 export async function correrCapturas(op: OpcionesCaptura): Promise<string[]> {
   const carpeta = (process.env.SFIDA_CAPTURA || '').trim();
-  const esperaMs = Number(process.env.SFIDA_CAPTURA_ESPERA || 900);
+  // 900 ms alcanzaba hasta la v4. Con el panel de valor e inversión, Reportes
+  // hace dos consultas pesadas y la foto salía con las tarjetas en cero: no
+  // fallaba nada, simplemente se fotografiaba la pantalla antes de tiempo. Es
+  // el tipo de error que se ve solo MIRANDO la captura.
+  const esperaMs = Number(process.env.SFIDA_CAPTURA_ESPERA || 1600);
   mkdirSync(carpeta, { recursive: true });
 
   capturando = true;

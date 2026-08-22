@@ -5,9 +5,9 @@
  * paleta declarada en `estilos.css`, que a su vez viene de `sfida_estilo.py`.
  * ------------------------------------------------------------------------- */
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { useAnimaciones } from '../estado/animaciones';
+import { CURVA, NORMAL, RAPIDO, RESORTE, cascada, useAnimaciones } from '../estado/animaciones';
 
 /* ------------------------------------------------------------------ texto */
 
@@ -109,9 +109,12 @@ export function Boton({
       title={title}
       onClick={onClick}
       disabled={disabled}
+      // El hundido al tocar es lo que hace que un botón se sienta «de verdad».
+      // Va más rápido que el resto: si el clic tarda en responder, la persona
+      // vuelve a hacer clic pensando que no registró.
       whileHover={anim && !disabled ? { y: -1 } : undefined}
-      whileTap={anim && !disabled ? { scale: 0.97 } : undefined}
-      transition={{ duration: 0.12 }}
+      whileTap={anim && !disabled ? { scale: 0.96, y: 0 } : undefined}
+      transition={{ duration: RAPIDO, ease: CURVA }}
       className={`cursor-pointer rounded-lg px-4 py-2.5 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:bg-[#cfd7e3] disabled:text-white ${TONOS[tono]} ${className}`}
     >
       {children}
@@ -130,6 +133,11 @@ export function Chips<T extends string>({
   alElegir: (v: T) => void;
 }): React.JSX.Element {
   const anim = useAnimaciones();
+  // El `layoutId` tiene que ser ÚNICO POR GRUPO. Es un identificador global de
+  // Framer Motion: si dos grupos de chips visibles a la vez compartieran el
+  // mismo, la pastilla blanca saltaría de un grupo al otro al hacer clic, como
+  // si se teletransportara. Pasa desde que la pantalla de stock tiene dos.
+  const grupo = useId();
   return (
     <div className="flex gap-0.5 rounded-[9px] bg-separador p-0.5">
       {opciones.map((o) => (
@@ -140,8 +148,8 @@ export function Chips<T extends string>({
         >
           {valor === o.id && (
             <motion.span
-              layoutId="chip-activo"
-              transition={anim ? { type: 'spring', stiffness: 420, damping: 34 } : { duration: 0 }}
+              layoutId={`chip-activo-${grupo}`}
+              transition={anim ? RESORTE : { duration: 0 }}
               className="absolute inset-0 rounded-[7px] bg-white shadow-sm"
             />
           )}
@@ -171,6 +179,8 @@ export function Campo({
   autoFocus,
   disabled,
   alEnter,
+  numerico = false,
+  derecha = false,
 }: {
   valor: string;
   alCambiar: (v: string) => void;
@@ -181,6 +191,10 @@ export function Campo({
   autoFocus?: boolean;
   disabled?: boolean;
   alEnter?: () => void;
+  /** Abre el teclado numérico en pantallas táctiles. El tipo sigue siendo texto. */
+  numerico?: boolean;
+  /** Alinea el contenido a la derecha, como corresponde a las cantidades. */
+  derecha?: boolean;
 }): React.JSX.Element {
   // El ancho va en un contenedor, no en el <input>. Si se pusiera en el mismo
   // elemento, `w-full` y el ancho que manda la pantalla compiten y gana el que
@@ -194,11 +208,12 @@ export function Campo({
         autoFocus={autoFocus}
         disabled={disabled}
         placeholder={placeholder}
+        inputMode={numerico ? 'decimal' : undefined}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && alEnter) alEnter();
         }}
         onChange={(e) => alCambiar(mayusculas ? e.target.value.toUpperCase() : e.target.value)}
-        className="w-full cursor-text rounded-lg border border-[#d9dfe8] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors select-text placeholder:text-[#a9b3c1] hover:border-[#c3ccda] focus:border-azul focus:ring-1 focus:ring-azul disabled:bg-[#f2f5f9] disabled:text-suave"
+        className={`w-full cursor-text rounded-lg border border-[#d9dfe8] bg-white px-3 py-2.5 text-[14px] outline-none transition-colors select-text placeholder:text-[#a9b3c1] hover:border-[#c3ccda] focus:border-azul focus:ring-1 focus:ring-azul disabled:bg-[#f2f5f9] disabled:text-suave ${derecha ? 'text-right' : ''}`}
       />
     </div>
   );
@@ -359,18 +374,23 @@ export function Tarjeta({
   pie,
   color,
   icono,
+  orden = 0,
 }: {
   titulo: string;
   valor: string | number;
   pie: string;
   color: string;
   icono: ReactNode;
+  /** Posición en la fila, para que entren una detrás de otra. */
+  orden?: number;
 }): React.JSX.Element {
   const anim = useAnimaciones();
   return (
     <motion.div
+      initial={anim ? { opacity: 0, y: 8 } : false}
+      animate={{ opacity: 1, y: 0 }}
       whileHover={anim ? { y: -2 } : undefined}
-      transition={{ duration: 0.15 }}
+      transition={{ duration: anim ? NORMAL : 0, delay: anim ? cascada(orden, 0.05, 6) : 0, ease: CURVA }}
       className="min-w-0 flex-1 rounded-xl border border-borde bg-white p-3.5"
     >
       <div className="flex items-center gap-2">
@@ -424,6 +444,8 @@ export function Tabla<T>({
   alDobleClic?: (f: T) => void;
   alto?: string;
 }): React.JSX.Element {
+  const anim = useAnimaciones();
+
   if (cargando) {
     return (
       <div className="overflow-hidden rounded-xl border border-borde bg-white p-3">
@@ -441,10 +463,15 @@ export function Tabla<T>({
   if (filas.length === 0) {
     const t = sinResultados ?? vacio ?? { titulo: 'Sin datos', detalle: '' };
     return (
-      <div className="rounded-xl border border-borde bg-white px-6 py-10 text-center">
+      <motion.div
+        initial={anim ? { opacity: 0, y: 4 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: anim ? NORMAL : 0, ease: CURVA }}
+        className="rounded-xl border border-borde bg-white px-6 py-10 text-center"
+      >
         <p className="font-semibold">{t.titulo}</p>
         {t.detalle && <p className="mt-1 text-[13px] text-suave">{t.detalle}</p>}
-      </div>
+      </motion.div>
     );
   }
 
@@ -466,12 +493,19 @@ export function Tabla<T>({
             </tr>
           </thead>
           <tbody>
-            {filas.map((f) => {
+            {filas.map((f, i) => {
               const k = clave(f);
               const sel = seleccionada !== undefined && seleccionada === k;
               return (
-                <tr
+                <motion.tr
                   key={k}
+                  // La cascada corre SOLO al montarse la fila. Como la clave es
+                  // el id, al filtrar las que siguen estando no se vuelven a
+                  // animar: se mueven las nuevas y nada más. Si se animara todo
+                  // en cada tecla del buscador, escribir sería mareante.
+                  initial={anim ? { opacity: 0, y: 6 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: anim ? NORMAL : 0, delay: anim ? cascada(i) : 0, ease: CURVA }}
                   onClick={() => alSeleccionar?.(f)}
                   onDoubleClick={() => alDobleClic?.(f)}
                   className={`border-t border-separador transition-colors ${
@@ -486,7 +520,7 @@ export function Tabla<T>({
                       {c.render(f)}
                     </td>
                   ))}
-                </tr>
+                </motion.tr>
               );
             })}
           </tbody>
@@ -548,10 +582,12 @@ export function Dialogo({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
         >
           <motion.div
-            initial={anim ? { opacity: 0, scale: 0.97, y: 6 } : false}
+            // Entra con resorte (se siente vivo) y sale con una curva simple:
+            // un resorte al cerrar rebota cuando la persona ya dejó de mirar.
+            initial={anim ? { opacity: 0, scale: 0.96, y: 10 } : false}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={anim ? { opacity: 0, scale: 0.98, y: 4 } : undefined}
-            transition={{ duration: anim ? 0.16 : 0, ease: [0.16, 1, 0.3, 1] }}
+            exit={anim ? { opacity: 0, scale: 0.98, y: 4, transition: { duration: RAPIDO } } : undefined}
+            transition={anim ? RESORTE : { duration: 0 }}
             className={`flex max-h-[88vh] w-full ${ancho} flex-col overflow-hidden rounded-2xl bg-gris-fondo shadow-2xl`}
           >
             <div className="border-b border-borde bg-white px-5 py-3.5">
@@ -656,10 +692,14 @@ export function Avisos({
         {avisos.map((a) => (
           <motion.div
             key={a.id}
-            initial={anim ? { opacity: 0, y: 10 } : false}
-            animate={{ opacity: 1, y: 0 }}
-            exit={anim ? { opacity: 0, y: 6 } : undefined}
-            transition={{ duration: anim ? 0.18 : 0 }}
+            // `layout` hace que, cuando se va el aviso de arriba, los de abajo
+            // se deslicen a su lugar en vez de saltar. Con varios avisos
+            // seguidos —que es cuando pasa— la diferencia se nota.
+            layout
+            initial={anim ? { opacity: 0, y: 14, scale: 0.97 } : false}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={anim ? { opacity: 0, y: 6, scale: 0.98 } : undefined}
+            transition={anim ? RESORTE : { duration: 0 }}
             className={`pointer-events-auto rounded-lg px-4 py-3 text-[13px] font-semibold shadow-lg ${AVISO_CLASES[a.tipo]}`}
           >
             <span className="whitespace-pre-wrap">{a.texto}</span>
@@ -759,5 +799,105 @@ export function ComboArticulo({
         </div>
       )}
     </div>
+  );
+}
+
+/* =========================================================================
+ * CAMPOS DE LA v5
+ * ========================================================================= */
+
+/**
+ * Campo de precio.
+ *
+ * Antes era un `SpinNumero` con el prefijo «S/ » DENTRO del campo, y eso lo
+ * volvía incómodo: al escribir había que esquivar el prefijo y el cursor
+ * saltaba. Ahora el «S/» es una etiqueta FIJA al costado, fuera del campo, y
+ * adentro solo se escribe el número.
+ */
+export function CampoPrecio({
+  valor,
+  alCambiar,
+  className = '',
+}: {
+  valor: number;
+  alCambiar: (v: number) => void;
+  className?: string;
+}): React.JSX.Element {
+  // Se guarda el texto crudo para no pelear con el cursor mientras se escribe
+  // («12.» es un estado válido intermedio que `Number` convertiría en 12).
+  const [texto, setTexto] = useState<string | null>(null);
+  const mostrado = texto ?? (valor ? String(valor) : '');
+
+  return (
+    <div className={`flex items-stretch overflow-hidden rounded-lg border border-[#d9dfe8] bg-white focus-within:border-azul focus-within:ring-1 focus-within:ring-azul ${className}`}>
+      <span className="grid shrink-0 place-items-center bg-separador px-3 text-[13px] font-semibold text-[#4a5563]">
+        S/
+      </span>
+      <input
+        inputMode="decimal"
+        value={mostrado}
+        placeholder="0.00"
+        onChange={(e) => {
+          const crudo = e.target.value.replace(',', '.');
+          if (crudo !== '' && !/^\d*\.?\d*$/.test(crudo)) return;
+          setTexto(crudo);
+          alCambiar(crudo === '' || crudo === '.' ? 0 : Number(crudo));
+        }}
+        onBlur={() => setTexto(null)}
+        className="w-full min-w-0 cursor-text border-0 bg-transparent px-3 py-2.5 text-right text-[14px] outline-none select-text"
+      />
+    </div>
+  );
+}
+
+/**
+ * Selector de unidad para una línea.
+ *
+ * Solo ofrece unidades de la MISMA familia que la unidad de stock del
+ * artículo: no se puede pasar de litros a kilos. Debajo muestra a cuánto
+ * equivale, que es lo que de verdad va a descontar el sistema.
+ */
+export function SelectorUnidad({
+  unidadStock,
+  valor,
+  alCambiar,
+  className = '',
+}: {
+  unidadStock: string | null;
+  valor: string;
+  alCambiar: (v: string) => void;
+  className?: string;
+}): React.JSX.Element {
+  const [opciones, setOpciones] = useState<Array<{ codigo: string; nombre: string }>>([]);
+
+  useEffect(() => {
+    if (!unidadStock) {
+      setOpciones([]);
+      return;
+    }
+    void window.sfida.articulos.unidadesDe(unidadStock).then((r) => {
+      if (r.ok) setOpciones(r.datos.map((u) => ({ codigo: u.codigo, nombre: u.nombre })));
+    });
+  }, [unidadStock]);
+
+  if (!unidadStock) {
+    return (
+      <div className={`rounded-lg border border-[#d9dfe8] bg-[#f2f5f9] px-3 py-2.5 text-[14px] text-suave ${className}`}>
+        —
+      </div>
+    );
+  }
+
+  return (
+    <Selector
+      valor={valor || unidadStock}
+      alCambiar={alCambiar}
+      className={className}
+      opciones={
+        opciones.length
+          ? opciones.map((u) => ({ id: u.codigo, texto: `${u.codigo} · ${u.nombre}` }))
+          : [{ id: unidadStock, texto: unidadStock }]
+      }
+    />
   );
 }

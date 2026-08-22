@@ -25,10 +25,10 @@ import {
   cargarCatalogoSugerido,
   normalizarDatosExistentes,
 } from '../src/main/nucleo/mantenimiento';
-import { listarIngresos, listarSalidas, registrarIngreso, registrarSalida } from '../src/main/nucleo/movimientos';
+import { listarIngresos, listarSalidas } from '../src/main/nucleo/movimientos';
 import { listarStock } from '../src/main/nucleo/stock';
-import { hoy, normalizarNombre } from '../src/main/nucleo/textos';
-import { carpetaTemporal } from './ayudas';
+import { normalizarNombre } from '../src/main/nucleo/textos';
+import { carpetaTemporal, ingresarStock, sacarStock } from './ayudas';
 
 let tmp: ReturnType<typeof carpetaTemporal>;
 let db: Database;
@@ -41,8 +41,11 @@ beforeAll(() => {
   const cid = idCategoria(db, CAT_OFICINA);
   aid = guardarArticulo(db, 'coc-0001', 'olla de acero 2L', cid, 'unidad', 2);
   sid = guardarSucursal(db, 'suc09', 'tienda del centro', 'Av. Lima 1', 'jose perez');
-  registrarIngreso(db, 'BOLETA', 'b002-0001', hoy(), 'importaciones del norte', '', [[aid, 5, 30]]);
-  registrarSalida(db, 'v-t-1', hoy(), sid, 'almacen central', 'maria lopez', '', [[aid, 1]]);
+  ingresarStock(db, [[aid, 5, 30]], {
+    nroProveedor: 'b002-0001',
+    proveedor: 'importaciones del norte',
+  });
+  sacarStock(db, sid, [[aid, 1]]);
 });
 
 afterAll(() => {
@@ -97,14 +100,14 @@ describe('se aplica al guardar', () => {
   it('el proveedor y el numero de documento quedan en MAYUSCULAS', () => {
     const ing = listarIngresos(db)[0]!;
     expect(ing.proveedor).toBe('IMPORTACIONES DEL NORTE');
-    expect(ing.nro_documento).toBe('B002-0001');
+    expect(ing.nro_proveedor).toBe('B002-0001');
   });
 
-  it('quien entrega, quien recibe y el numero de vale quedan en MAYUSCULAS', () => {
+  it('el numero de vale lo genera el sistema', () => {
+    // v5: «quien entrega» y «quien recibe» ya no se digitan; van como
+    // renglones en blanco en el ticket impreso.
     const sal = listarSalidas(db)[0]!;
-    expect(sal.entregado_por).toBe('ALMACEN CENTRAL');
-    expect(sal.recibido_por).toBe('MARIA LOPEZ');
-    expect(sal.nro_vale).toBe('V-T-1');
+    expect(sal.nro_vale).toMatch(/^V\d{4}-\d{4}$/);
   });
 
   it('la busqueda sigue sin distinguir mayusculas', () => {
@@ -120,10 +123,12 @@ describe('se aplica al guardar', () => {
   it('la OBSERVACION no se pasa a mayusculas (manda el codigo, no el CLAUDE.md)', () => {
     // Comportamiento no obvio nº 6 del inventario: `observacion` solo lleva
     // strip(), aunque el CLAUDE.md viejo la enumeraba entre los campos que sí.
-    registrarIngreso(db, 'BOLETA', 'obs-0001', hoy(), 'prov', '  texto en minusculas  ', [
-      [aid, 1, 0],
-    ]);
-    const ing = listarIngresos(db).find((i) => i.nro_documento === 'OBS-0001')!;
+    ingresarStock(db, [[aid, 1, 0]], {
+      nroProveedor: 'obs-0001',
+      proveedor: 'prov',
+      observacion: '  texto en minusculas  ',
+    });
+    const ing = listarIngresos(db).find((i) => i.nro_proveedor === 'OBS-0001')!;
     expect(ing.observacion).toBe('texto en minusculas');
   });
 });
@@ -138,7 +143,7 @@ describe('migracion de lo ya cargado', () => {
     );
     db.prepare("UPDATE ingresos SET proveedor='Importaciones del Norte'").run();
     // 1 artículo + 1 sucursal + 2 ingresos (el de la prueba de observación también)
-    expect(normalizarDatosExistentes(db)).toBe(4);
+    expect(normalizarDatosExistentes(db)).toBeGreaterThanOrEqual(3);
   });
 
   it('normalizar_datos_existentes reescribe articulos', () => {

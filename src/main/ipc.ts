@@ -11,9 +11,8 @@ import { basename, join } from 'node:path';
 import { dialog, ipcMain, shell } from 'electron';
 import type { Database } from 'better-sqlite3';
 
-import { CANALES, type AnchoPapel, type ConsumoSucursal, type DatosEmpresa, type InfoBaseDatos, type MinimoSugerido, type Respuesta, type SucursalConTotales } from '../compartido/contrato';
-import { vistaPrevia as previaVale, imprimirVale, pdfVale } from './impresion/imprimir';
-import type { DatosVale } from './impresion/ticket';
+import { CANALES, type AnchoPapel, type ConsumoSucursal, type DatosEmpresa, type InfoBaseDatos, type MinimoSugerido, type OpcionesImpresion, type Respuesta, type SucursalConTotales, type TipoComprobante } from '../compartido/contrato';
+import { vistaPrevia as previaVale, imprimirVale, pdfVale, type Comprobante } from './impresion/imprimir';
 import {
   codigoSugerido,
   conteos,
@@ -39,7 +38,7 @@ import {
   setConfig,
   verificarClave,
 } from './nucleo/config';
-import { serializarError } from './nucleo/errores';
+import { ErrorNegocio, serializarError } from './nucleo/errores';
 import {
   CATALOGO_SUGERIDO,
   cargarCatalogoSugerido,
@@ -52,7 +51,9 @@ import {
   restaurarBd,
   tamanoBd,
 } from './nucleo/mantenimiento';
+import type { DatosIngreso, DatosSalida } from './nucleo/movimientos';
 import {
+  aplicarConteoFisico,
   cabeceraIngreso,
   cabeceraSalida,
   detalleIngreso,
@@ -65,6 +66,7 @@ import {
   registrarAjuste,
   registrarIngreso,
   registrarSalida,
+  siguienteNroIngreso,
   siguienteNroVale,
 } from './nucleo/movimientos';
 import {
@@ -73,8 +75,11 @@ import {
   consumoPorSucursal,
   detalleConsumoSucursal,
   estadisticasMensuales,
+  evolucionValorAlmacen,
+  inversionPorSucursal,
   kardex,
   minimosSugeridos,
+  sugerenciaCompra,
 } from './nucleo/reportes';
 import {
   actualizarCostoLinea,
@@ -88,7 +93,7 @@ import {
   ultimoPrecio,
 } from './nucleo/stock';
 import { hoy } from './nucleo/textos';
-import { UNIDADES, equivalenciaUnidad } from './nucleo/unidades';
+import { UNIDADES, equivalenciaUnidad, unidadesCompatibles } from './nucleo/unidades';
 
 const req = createRequire(import.meta.url);
 
@@ -310,17 +315,8 @@ export function registrarIpc(ctx: ContextoIpc): void {
   manejar(CANALES.ingListar, (texto?: string) => listarIngresos(db, null, null, texto ?? ''));
   manejar(CANALES.ingDetalle, (id: number) => detalleIngreso(db, id));
   manejar(CANALES.ingCabecera, (id: number) => cabeceraIngreso(db, id) ?? null);
-  manejar(
-    CANALES.ingRegistrar,
-    (i: {
-      tipoDoc: string;
-      nroDocumento: string;
-      fecha: string;
-      proveedor: string;
-      observacion: string;
-      items: Array<[number, number, number]>;
-    }) => registrarIngreso(db, i.tipoDoc, i.nroDocumento, i.fecha, i.proveedor, i.observacion, i.items),
-  );
+  manejar(CANALES.ingSiguienteNro, () => siguienteNroIngreso(db));
+  manejar(CANALES.ingRegistrar, (i: DatosIngreso) => registrarIngreso(db, i));
   manejar(CANALES.ingAnular, (id: number) => {
     eliminarIngreso(db, id);
     return true as const;
@@ -337,28 +333,7 @@ export function registrarIpc(ctx: ContextoIpc): void {
   manejar(CANALES.salCabecera, (id: number) => cabeceraSalida(db, id) ?? null);
   manejar(CANALES.salSiguienteVale, () => siguienteNroVale(db));
   manejar(CANALES.salExisteVale, (v: string) => existeVale(db, v));
-  manejar(
-    CANALES.salRegistrar,
-    (s: {
-      nroVale: string;
-      fecha: string;
-      sucursalId: number | null;
-      entregadoPor: string;
-      recibidoPor: string;
-      observacion: string;
-      items: Array<[number, number]>;
-    }) =>
-      registrarSalida(
-        db,
-        s.nroVale,
-        s.fecha,
-        s.sucursalId,
-        s.entregadoPor,
-        s.recibidoPor,
-        s.observacion,
-        s.items,
-      ),
-  );
+  manejar(CANALES.salRegistrar, (s: DatosSalida) => registrarSalida(db, s));
   manejar(CANALES.salAnular, (id: number) => {
     eliminarSalida(db, id);
     return true as const;
@@ -491,13 +466,8 @@ export function registrarIpc(ctx: ContextoIpc): void {
     papel: Number(getConfig(db, 'papel_vales', '80') ?? 80) as AnchoPapel,
   }));
 
-  /** Junta todo lo que necesita el vale: cabecera, detalle y datos de empresa. */
-  function datosVale(salidaId: number): DatosVale {
-    const cab = cabeceraSalida(db, salidaId);
-    if (!cab) throw new Error('El vale ya no existe.');
+  function membrete(): { empresa: string; empresaDir: string; empresaRuc: string; impresoEl: string } {
     return {
-      cab: { ...cab, items: 0, unidades: 0 },
-      det: detalleSalida(db, salidaId),
       empresa: getConfig(db, 'empresa', 'SFIDA') ?? 'SFIDA',
       empresaDir: getConfig(db, 'empresa_dir', '') ?? '',
       empresaRuc: getConfig(db, 'empresa_ruc', '') ?? '',
@@ -510,37 +480,93 @@ export function registrarIpc(ctx: ContextoIpc): void {
     };
   }
 
-  manejar(CANALES.impVistaPrevia, (salidaId: number, anchoMm: AnchoPapel) =>
-    previaVale(datosVale(salidaId), anchoMm),
+  /** Junta todo lo que necesita el comprobante, sea salida o ingreso. */
+  function comprobante(tipo: TipoComprobante, id: number): Comprobante {
+    if (tipo === 'salida') {
+      const cab = cabeceraSalida(db, id);
+      if (!cab) throw new ErrorNegocio('El vale ya no existe.');
+      return { tipo: 'salida', datos: { cab, det: detalleSalida(db, id), ...membrete() } };
+    }
+    const cab = cabeceraIngreso(db, id);
+    if (!cab) throw new ErrorNegocio('El ingreso ya no existe.');
+    const det = detalleIngreso(db, id);
+    return {
+      tipo: 'ingreso',
+      datos: {
+        nroDocumento: cab.nro_documento,
+        nroProveedor: cab.nro_proveedor,
+        tipoDoc: cab.tipo_doc,
+        fecha: cab.fecha,
+        proveedor: cab.proveedor ?? '',
+        observacion: cab.observacion ?? '',
+        det,
+        total: det.reduce((s, d) => s + d.cantidad * d.costo_unitario, 0),
+        ...membrete(),
+      },
+    };
+  }
+
+  manejar(CANALES.impVistaPrevia, (tipo: TipoComprobante, id: number, anchoMm: AnchoPapel) =>
+    previaVale(comprobante(tipo, id), anchoMm),
   );
 
-  manejar(CANALES.impImprimir, async (o: { salidaId: number; anchoMm: AnchoPapel; deviceName?: string; copias?: number }) => {
-    if (!o.deviceName) throw new Error('Elija una impresora.');
-    const r = await imprimirVale(datosVale(o.salidaId), o.anchoMm, o.deviceName, o.copias ?? 2);
+  manejar(CANALES.impImprimir, async (o: OpcionesImpresion) => {
+    if (!o.deviceName) throw new ErrorNegocio('Elija una impresora.');
+    const c = comprobante(o.tipo, o.id);
+    const r = await imprimirVale(c, o.anchoMm, o.deviceName, o.copias ?? 2);
     if (r.ok) {
       setConfig(db, 'impresora_vales', o.deviceName);
       setConfig(db, 'papel_vales', o.anchoMm);
-      const cab = cabeceraSalida(db, o.salidaId);
-      auditar(db, 'IMPRESION', `Vale ${cab?.nro_vale} en ${o.deviceName} (${o.copias ?? 2} copias)`);
+      const nro = c.tipo === 'salida' ? c.datos.cab.nro_vale : c.datos.nroDocumento;
+      auditar(db, 'IMPRESION', `${nro} en ${o.deviceName} (${o.copias ?? 2} copias)`);
     }
     return r;
   });
 
-  manejar(CANALES.impGuardarPdf, async (o: { salidaId: number; anchoMm: AnchoPapel }) => {
-    const cab = cabeceraSalida(db, o.salidaId);
+  manejar(CANALES.impGuardarPdf, async (o: OpcionesImpresion) => {
+    const c = comprobante(o.tipo, o.id);
+    const nro = c.tipo === 'salida' ? c.datos.cab.nro_vale : c.datos.nroDocumento;
     const r = await dialog.showSaveDialog(ctx.ventana()!, {
-      title: 'Guardar el vale en PDF',
+      title: 'Guardar el comprobante en PDF',
       defaultPath: join(
         carpetaDocumentos(),
-        `vale_${String(cab?.nro_vale ?? o.salidaId).replace(/\//g, '-')}.pdf`,
+        `${c.tipo}_${String(nro).replace(/[\/]/g, '-')}.pdf`,
       ),
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     });
     if (r.canceled || !r.filePath) return { ok: false, motivo: 'cancelado' };
-    const res = await pdfVale(datosVale(o.salidaId), o.anchoMm, r.filePath);
+    const res = await pdfVale(c, o.anchoMm, r.filePath);
     setConfig(db, 'papel_vales', o.anchoMm);
     return { ok: res.ok, motivo: res.motivo, ruta: r.filePath };
   });
+
+  /* ------------------------------------------------------- dashboard (v5) */
+  manejar(CANALES.repEvolucionValor, (desde: string, hasta: string, puntos?: number) =>
+    evolucionValorAlmacen(db, desde, hasta, puntos ?? 12),
+  );
+  manejar(CANALES.repInversionSucursal, (desde: string, hasta: string) =>
+    inversionPorSucursal(db, desde, hasta),
+  );
+  manejar(CANALES.repSugerenciaCompra, (meses: number, dias: number) =>
+    sugerenciaCompra(db, meses, dias),
+  );
+
+  /* ------------------------------------------------ unidades compatibles */
+  manejar(CANALES.artUnidadesDe, (unidadStock: string) =>
+    unidadesCompatibles(unidadStock).map((u) => ({
+      codigo: u.codigo,
+      nombre: u.nombre,
+      familia: TIPO_FAMILIA[u.familia] ?? u.familia,
+      equivalencia: equivalenciaUnidad(u.codigo) || 'es la unidad base',
+    })),
+  );
+
+  /* -------------------------------------------------- conteo fisico (v5) */
+  manejar(
+    CANALES.maeConteoFisico,
+    (contados: Array<{ articuloId: number; contado: number }>, motivo: string) =>
+      aplicarConteoFisico(db, contados, motivo),
+  );
 
   // Se referencia para que el bundler no lo descarte del árbol.
   void CATALOGO_SUGERIDO;

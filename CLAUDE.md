@@ -17,7 +17,7 @@ Es la reescritura en Electron de la versión Python + PySide6 que está en
 ```bash
 npm install                  # verifica que better-sqlite3 cargue en Electron
 npm run dev                  # la app, con recarga en caliente
-npm test                     # 172 pruebas de lógica, sin abrir ninguna ventana
+npm test                     # 241 pruebas de lógica, sin abrir ninguna ventana
 npm run typecheck            # TypeScript en los tres procesos
 npm run demo                 # crea datos/sfida_demo.db con datos de ejemplo
 npm run capturas             # capturas de las 7 pantallas en 1366×768 y 1920×1080
@@ -53,6 +53,8 @@ su prueba.
 | `src/preload/` | El único puente. Expone `window.sfida` y nada más. |
 | `src/compartido/` | `contrato.ts`: los tipos del IPC, importados por los tres lados. |
 | `src/renderer/` | React + Tailwind. Las 7 pantallas y los 7 diálogos. |
+| `src/renderer/src/ui/graficos.tsx` | Los dos gráficos, en SVG propio. **Sin librería**: las que sirven pesan entre 400 KB y 1 MB y viajarían enteras en el instalador de la PC vieja. |
+| `src/renderer/src/estado/animaciones.tsx` | El interruptor **y el vocabulario común** de tiempos y curvas (`CURVA`, `RAPIDO`, `NORMAL`, `RESORTE`, `cascada()`). Ninguna pantalla inventa los suyos. |
 | `pruebas/` | Vitest. Corren en Node, sin ventanas. |
 
 ### Reglas de oro al modificar
@@ -75,17 +77,29 @@ su prueba.
 
 ## Modelo de datos (SQLite)
 
-**El archivo es el MISMO que usa la app de Python.** El esquema no se toca:
-mismos nombres de tabla, columna e índice. Está en `src/main/db/esquema.ts`,
-copiado literal de `ESQUEMA` en `sfida_core.py`, y **hay una prueba que compara
-el esquema que creamos contra el que crea Python y falla si difieren en una
-sola columna, default, clave foránea o índice** (`pruebas/esquema.test.ts`).
+**Hasta la v4 el archivo era el MISMO que usa la app de Python.** Desde la
+**v5 ya no**: se agregaron columnas a propósito y la app vieja no las entiende.
+
+`pruebas/esquema.test.ts` compara contra `fijos/esquema-v5.txt` y además deja
+por escrito **en qué** se separó de Python: 5 columnas agregadas, **cero
+borradas** (una base v4 migrada no pierde nada), 5 índices nuevos y un solo
+default cambiado. Si esa lista crece, la prueba falla y hay que decidir a
+conciencia si `migraciones.ts` lo cubre.
+
+**El esquema va en DOS constantes**, `ESQUEMA_TABLAS` y `ESQUEMA_INDICES`, y
+`conectar()` intercala la migración entre las dos. No es un capricho: algunos
+índices se apoyan en columnas que la v4 no tenía, y creándolos antes de migrar
+una base vieja no abriría nunca. Ver la trampa 24.
+
+**El orden de `conectar()` importa y está comentado ahí mismo:**
+tablas → respaldo → normalizar unidades → migrar → índices → semillas.
 
 - `categorias` · `articulos` · `sucursales`
-- `ingresos` + `ingreso_det` → la boleta de compra (único por tipo+número)
+- `ingresos` + `ingreso_det` → la boleta de compra
 - `salidas` + `salida_det` → el vale de reparto a una sucursal
 - `ajustes` → correcciones por conteo físico
-- `config` → clave maestra (PBKDF2 + sal) y datos de la empresa
+- `config` → clave maestra (PBKDF2 + sal), datos de la empresa y
+  `esquema_version`
 - `auditoria` → qué se hizo, cuándo
 
 **El stock nunca se guarda como columna**: se calcula sumando ingresos, menos
@@ -94,6 +108,10 @@ salidas, más ajustes (`SQL_STOCK` en `nucleo/stock.ts`). No agregues un campo
 
 **El precio tampoco vive en el artículo**: pertenece a cada línea de la boleta
 (`ingreso_det.costo_unitario`).
+
+**`articulos.unidad` es la unidad de STOCK**, la más chica de su familia. Las
+cantidades de `ingreso_det` y `salida_det` están SIEMPRE en esa unidad;
+`cantidad_origen` + `unidad_origen` guardan lo que se digitó de verdad.
 
 **`PRAGMA foreign_keys = ON` se activa en cada conexión.** SQLite las trae
 apagadas: sin esto, los `ON DELETE CASCADE` no se disparan y anular una boleta
@@ -114,10 +132,19 @@ eso causó una pérdida total de datos. El equivalente peligroso acá es
 **Ojo: `app.getPath('userData')` en Windows es `%APPDATA%` (Roaming), NO
 `%LOCALAPPDATA%`.** La ruta se arma explícita en `rutas.ts`.
 
-**Antes de la primera escritura sobre una base heredada de Python** se hace una
-copia con fecha automáticamente. Se hace una sola vez y queda marcada en
-`config` (`respaldo_pre_electron`). El orden importa: primero se copia, después
-se marca.
+### Los dos respaldos, que son distintos
+
+| Cuál | Cuándo | Cuántos |
+|---|---|---|
+| `respaldarConBase()` | **una sola vez**, antes de la primera escritura sobre una base heredada de Python | 1, marcado en `config.respaldo_pre_electron` |
+| `respaldoAutomatico()` | **en cada apertura** (v5) | los últimos 10, en `respaldos/` |
+
+En el primero el orden importa: **primero se copia, después se marca.** Al
+revés, si la copia fallara quedaría marcado como respaldado sin estarlo.
+
+Los dos corren **antes** de migrar: si la migración sale mal, el archivo de
+antes sigue estando. Y los dos son red contra el error humano, **no** contra un
+disco roto: siguen en el mismo disco. Ver `SEGURIDAD.md`.
 
 ---
 
@@ -159,9 +186,29 @@ Catálogo cerrado de 22 unidades en 4 familias, cada una con su base:
 BOL, JGO, ROL y BLQ no muestran equivalencia aunque no sean la base.
 **`normalizarUnidad()` nunca falla: cae en UND.**
 
+### Fraccionamiento (v5)
+
+Se compra por galón y se reparte por litro o por 500 ml. El artículo se define
+en su unidad **chica** y cada movimiento se digita en la unidad que convenga.
+
+**`convertirLinea()` convierte DOS cosas, no una: la cantidad Y el precio.**
+Si un galón costaba S/ 22, el litro cuesta 22 / 3.785. Convertir solo la
+cantidad valorizaría el inventario 3.785 veces de más **sin que nada avise**.
+
+`aUnidadStock()` devuelve `null` entre familias distintas (litros a kilos no
+existe) y eso se transforma en un error para la persona, nunca en una
+conversión inventada.
+
+**La tabla de unidades está duplicada en el renderer** (`ui/unidades.ts`) para
+no ir al proceso principal en cada tecla. Si se toca una, hay que tocar la otra.
+
 ### Movimientos
 
-- No se puede registrar dos veces la misma boleta (mismo tipo + número).
+- No se puede registrar dos veces la misma boleta del **mismo proveedor**
+  (`proveedor` + `nro_proveedor`). Un número de proveedor vacío se deja pasar:
+  hay compras sin comprobante.
+- **El N° interno del ingreso y el del vale los genera el sistema** y no se
+  pueden editar (`siguienteNroIngreso()`, `siguienteNroVale()`).
 - **`registrarSalida()` agrupa las líneas repetidas del mismo artículo ANTES de
   validar el stock**, y guarda una sola línea por artículo.
 - El orden de validación de `registrarSalida()` importa para los mensajes:
@@ -284,14 +331,32 @@ typescript 5.9.3 · react 19.2.18 · framer-motion 13.1.1`.
 Con Framer Motion. **A diferencia de Qt, acá el CSS sí anima**, así que no hay
 que construir cada movimiento a mano.
 
+**Los tiempos y las curvas NO se escriben en cada pantalla.** Salen todos de
+`estado/animaciones.tsx`, que es el vocabulario común:
+
+| Constante | Para qué |
+|---|---|
+| `RAPIDO` (0.14 s) | lo que la persona **toca**: si el clic tarda, vuelve a hacer clic |
+| `NORMAL` (0.22 s) | lo que **aparece** solo |
+| `PAUSADO` (0.34 s) | barras y trazos de los gráficos |
+| `RESORTE` | lo que se **desplaza** de un lugar a otro |
+| `cascada(i)` | entrada escalonada de una lista, **topeada** a 14 filas |
+
+Cuando cada pantalla elige los suyos, el conjunto se siente desprolijo aunque
+cada parte por separado esté bien.
+
 | Qué | Cómo |
 |---|---|
-| Cambio de página | Deslizamiento horizontal, **220 ms**, curva de salida suave. La dirección sale del orden del menú. |
-| Pastilla del menú | `motion.div` que se anima a la posición del botón activo. |
-| Chips | `layoutId` compartido: la pastilla blanca viaja entre opciones. |
-| Avisos | Fundido al entrar y al salir, 180 ms. Se van a los **6 segundos**. |
-| Diálogos | Escala + opacidad, 160 ms. |
-| Botones y filas | Respuesta al pasar el mouse. |
+| Cambio de página | Deslizamiento horizontal + 2 % de escala. La dirección sale del orden del menú. |
+| Pastilla del menú y chips | `RESORTE`, para que **viajen** en vez de desplazarse a velocidad constante. |
+| Filas de tabla | Entran en cascada. Como la clave es el id, **al filtrar solo se animan las nuevas**: si se animara todo en cada tecla, escribir sería mareante. |
+| Avisos | `layout` + resorte: al irse uno, los de abajo se deslizan a su lugar. Se van a los **6 segundos**. |
+| Diálogos | Entran con resorte, salen con curva simple: un resorte al cerrar rebota cuando la persona ya dejó de mirar. |
+| Gráfico de línea | La línea se traza de izquierda a derecha. Es el único movimiento largo y se justifica: es lo que hace mirar el gráfico. |
+
+**`layoutId` tiene que ser único por grupo.** Es un identificador global de
+Framer Motion: dos grupos de chips visibles a la vez con el mismo `layoutId`
+hacen que la pastilla salte de un grupo al otro. Por eso `Chips` usa `useId()`.
 
 **El interruptor** vive en Control Maestro → Respaldos y datos, se guarda en
 `config` y de fábrica viene **encendido**. Además se respeta **siempre**
@@ -321,7 +386,9 @@ En web no pasa igual, pero hay que hacerlo bien:
 
 ## Cambios deliberados respecto de la versión Python
 
-Están en `CAMBIOS_DELIBERADOS.md`. Resumen:
+Están en `CAMBIOS_DELIBERADOS.md`, en dos partes.
+
+**La v4 fue un port fiel**, con tres excepciones:
 
 1. **El correlativo del vale usa MAX del sufijo, no `COUNT(*)+1`.** Con COUNT,
    al anular un vale del medio el sistema proponía un número ya ocupado y
@@ -331,13 +398,19 @@ Están en `CAMBIOS_DELIBERADOS.md`. Resumen:
    ya la imprimía; solo faltaba que la pantalla la llenara.
 3. **La casilla «Imprimir el vale al guardar» sigue marcada de fábrica.**
 
-Cualquier otra diferencia es un error del port, no una decisión.
+**La v5 ya no es un port**: rompe la compatibilidad con Python a propósito.
+Fraccionamiento, N° de ingreso automático + N° del proveedor aparte, vale no
+editable, tickets nuevos, las tres supermejoras y dos correcciones de
+seguridad. Cada una con su motivo en `CAMBIOS_DELIBERADOS.md`.
+
+Cualquier diferencia que **no** esté en ese archivo es un error, no una
+decisión.
 
 ---
 
 ## El registro de trampas
 
-`TRAMPAS.md` tiene 23 entradas, cada una con **cómo se detectó**. Esa parte
+`TRAMPAS.md` tiene 24 entradas, cada una con **cómo se detectó**. Esa parte
 suele ser más útil que la solución. Si encontrás algo que falló de una forma
 que no se parecía al problema real, o que funcionó dando un resultado falso,
 sumalo ahí.

@@ -1,7 +1,7 @@
 {
   "name": "sfida-utilitarios-electron",
   "productName": "SFIDA Útiles",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "description": "Control de útiles de oficina y limpieza — versión Electron",
   "main": "./out/main/index.js",
   "private": true,
@@ -44,7 +44,7 @@
   },
   "build": {
     "appId": "com.sfida.utiles",
-    "productName": "SFIDA Utiles v4",
+    "productName": "SFIDA Utiles v5",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -79,7 +79,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SFIDA Utiles v4",
+      "shortcutName": "SFIDA Utiles v5",
       "artifactName": "SFIDA_Setup.exe",
       "deleteAppDataOnUninstall": false
     },

@@ -64,7 +64,10 @@ export interface SucursalConTotales extends Sucursal {
 export interface IngresoListado {
   id: number;
   tipo_doc: string;
+  /** N° INTERNO, lo genera el sistema. */
   nro_documento: string;
+  /** N° de la boleta del proveedor, tal como figura en el papel. */
+  nro_proveedor: string;
   fecha: string;
   proveedor: string | null;
   observacion: string | null;
@@ -76,8 +79,12 @@ export interface IngresoListado {
 export interface DetalleIngreso {
   id: number;
   articulo_id: number;
+  /** Cantidad en la unidad de STOCK del artículo. */
   cantidad: number;
   costo_unitario: number;
+  /** Lo que se digitó, si fue en otra unidad. */
+  cantidad_origen: number | null;
+  unidad_origen: string | null;
   codigo: string;
   nombre: string;
   unidad: string;
@@ -105,7 +112,10 @@ export interface CabeceraSalida extends SalidaListada {
 export interface DetalleSalida {
   id: number;
   articulo_id: number;
+  /** Cantidad en la unidad de STOCK del artículo. */
   cantidad: number;
+  cantidad_origen: number | null;
+  unidad_origen: string | null;
   codigo: string;
   nombre: string;
   unidad: string;
@@ -212,6 +222,61 @@ export interface UnidadCatalogo {
   equivalencia: string;
 }
 
+export interface PuntoValor {
+  fecha: string;
+  valor: number;
+  unidades: number;
+}
+
+export interface InversionSucursal {
+  codigo: string;
+  sucursal: string;
+  unidades: number;
+  vales: number;
+  invertido: number;
+}
+
+export interface SugerenciaCompra {
+  id: number;
+  codigo: string;
+  nombre: string;
+  unidad: string;
+  stock: number;
+  stock_minimo: number;
+  consumoMensual: number;
+  diasRestantes: number | null;
+  sugerido: number;
+  ultimoPrecio: number | null;
+  costoEstimado: number;
+  urgencia: 'sin stock' | 'urgente' | 'pronto' | 'holgado';
+}
+
+/** Una línea tal como se digita: la cantidad va en la unidad elegida. */
+export interface LineaDigitada {
+  articuloId: number;
+  cantidad: number;
+  /** Unidad elegida. Si se omite, se usa la de stock del artículo. */
+  unidad?: string;
+  /** Solo ingresos. Precio POR LA UNIDAD DIGITADA. */
+  costo?: number;
+}
+
+export interface DatosIngreso {
+  tipoDoc: string;
+  nroProveedor: string;
+  fecha: string;
+  proveedor: string;
+  observacion: string;
+  items: LineaDigitada[];
+}
+
+export interface DatosSalida {
+  fecha: string;
+  sucursalId: number | null;
+  observacion: string;
+  items: LineaDigitada[];
+}
+
 export interface DatosEmpresa {
   empresa: string;
   empresa_dir: string;
@@ -243,8 +308,13 @@ export interface ResultadoImportacion {
 
 export type AnchoPapel = 80 | 58 | 210;
 
+/** Qué comprobante se imprime. */
+export type TipoComprobante = 'salida' | 'ingreso';
+
 export interface OpcionesImpresion {
-  salidaId: number;
+  tipo: TipoComprobante;
+  /** id de la salida o del ingreso, según `tipo`. */
+  id: number;
   anchoMm: AnchoPapel;
   deviceName?: string;
   copias?: number;
@@ -330,6 +400,8 @@ export interface ApiSfida {
     reactivar(id: number): Promise<Respuesta<true>>;
     codigoSugerido(prefijo: string): Promise<Respuesta<string>>;
     ajustar(id: number, cantidadReal: number, motivo: string): Promise<Respuesta<true>>;
+    /** Unidades a las que se puede convertir, dada la unidad de stock. */
+    unidadesDe(unidadStock: string): Promise<Respuesta<UnidadCatalogo[]>>;
     ultimoPrecio(id: number): Promise<Respuesta<UltimoPrecio | null>>;
     importarCsv(): Promise<Respuesta<ResultadoImportacion | null>>;
     plantillaCsv(): Promise<Respuesta<string | null>>;
@@ -349,14 +421,8 @@ export interface ApiSfida {
     listar(texto?: string): Promise<Respuesta<IngresoListado[]>>;
     detalle(id: number): Promise<Respuesta<DetalleIngreso[]>>;
     cabecera(id: number): Promise<Respuesta<IngresoListado | null>>;
-    registrar(i: {
-      tipoDoc: string;
-      nroDocumento: string;
-      fecha: string;
-      proveedor: string;
-      observacion: string;
-      items: Array<[number, number, number]>;
-    }): Promise<Respuesta<number>>;
+    siguienteNro(): Promise<Respuesta<string>>;
+    registrar(i: DatosIngreso): Promise<Respuesta<number>>;
     anular(id: number): Promise<Respuesta<true>>;
     corregirPrecio(detId: number, precio: string): Promise<Respuesta<boolean>>;
   };
@@ -366,15 +432,7 @@ export interface ApiSfida {
     cabecera(id: number): Promise<Respuesta<CabeceraSalida | null>>;
     siguienteVale(): Promise<Respuesta<string>>;
     existeVale(v: string): Promise<Respuesta<boolean>>;
-    registrar(s: {
-      nroVale: string;
-      fecha: string;
-      sucursalId: number | null;
-      entregadoPor: string;
-      recibidoPor: string;
-      observacion: string;
-      items: Array<[number, number]>;
-    }): Promise<Respuesta<number>>;
+    registrar(s: DatosSalida): Promise<Respuesta<number>>;
     anular(id: number): Promise<Respuesta<true>>;
   };
   panel: {
@@ -392,6 +450,12 @@ export interface ApiSfida {
     historialPrecios(articuloId: number, desde: string, hasta: string): Promise<Respuesta<FilaHistorialPrecio[]>>;
     resumenPrecios(articuloId: number, desde: string, hasta: string): Promise<Respuesta<ResumenPrecios>>;
     exportar(nombre: string, cabeceras: string[], filas: unknown[][]): Promise<Respuesta<string | null>>;
+    /** Evolución del valor del almacén a lo largo del período. */
+    evolucionValor(desde: string, hasta: string, puntos?: number): Promise<Respuesta<PuntoValor[]>>;
+    /** Cuánto se invirtió en cada sucursal en el período. */
+    inversionSucursal(desde: string, hasta: string): Promise<Respuesta<InversionSucursal[]>>;
+    /** Qué y cuánto conviene comprar. */
+    sugerenciaCompra(meses: number, dias: number): Promise<Respuesta<SugerenciaCompra[]>>;
   };
   maestro: {
     auditoria(texto?: string, limite?: number): Promise<Respuesta<FilaAuditoria[]>>;
@@ -402,11 +466,20 @@ export interface ApiSfida {
     respaldar(): Promise<Respuesta<string | null>>;
     restaurar(): Promise<Respuesta<string | null>>;
     borrarMovimientos(): Promise<Respuesta<true>>;
+    /** Conteo físico guiado: aplica todos los ajustes de una vez. */
+    conteoFisico(
+      contados: Array<{ articuloId: number; contado: number }>,
+      motivo: string,
+    ): Promise<Respuesta<{ aplicados: number; sinCambio: number }>>;
   };
   impresion: {
     impresoras(): Promise<Respuesta<Impresora[]>>;
     preferencias(): Promise<Respuesta<{ impresora: string; papel: AnchoPapel }>>;
-    vistaPrevia(salidaId: number, anchoMm: AnchoPapel): Promise<Respuesta<VistaPreviaVale>>;
+    vistaPrevia(
+      tipo: TipoComprobante,
+      id: number,
+      anchoMm: AnchoPapel,
+    ): Promise<Respuesta<VistaPreviaVale>>;
     imprimir(o: OpcionesImpresion): Promise<Respuesta<ResultadoImpresion>>;
     guardarPdf(o: OpcionesImpresion): Promise<Respuesta<ResultadoImpresion>>;
   };
@@ -439,6 +512,7 @@ export const CANALES = {
   artCodigoSugerido: 'art:codigo-sugerido',
   artAjustar: 'art:ajustar',
   artUltimoPrecio: 'art:ultimo-precio',
+  artUnidadesDe: 'art:unidades-de',
   artImportar: 'art:importar',
   artPlantilla: 'art:plantilla',
 
@@ -449,6 +523,7 @@ export const CANALES = {
   ingListar: 'ing:listar',
   ingDetalle: 'ing:detalle',
   ingCabecera: 'ing:cabecera',
+  ingSiguienteNro: 'ing:siguiente-nro',
   ingRegistrar: 'ing:registrar',
   ingAnular: 'ing:anular',
   ingCorregirPrecio: 'ing:corregir-precio',
@@ -474,6 +549,9 @@ export const CANALES = {
   repHistPrecios: 'rep:hist-precios',
   repResumenPrecios: 'rep:resumen-precios',
   repExportar: 'rep:exportar',
+  repEvolucionValor: 'rep:evolucion-valor',
+  repInversionSucursal: 'rep:inversion-sucursal',
+  repSugerenciaCompra: 'rep:sugerencia-compra',
 
   maeAuditoria: 'mae:auditoria',
   maeLimpiarAud: 'mae:limpiar-aud',
@@ -483,6 +561,7 @@ export const CANALES = {
   maeRespaldar: 'mae:respaldar',
   maeRestaurar: 'mae:restaurar',
   maeBorrarMov: 'mae:borrar-mov',
+  maeConteoFisico: 'mae:conteo-fisico',
 
   impImpresoras: 'imp:impresoras',
   impPreferencias: 'imp:preferencias',

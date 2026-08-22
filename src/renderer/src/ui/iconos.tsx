@@ -23,7 +23,9 @@ function Svg({ children, tam = 20 }: { children: ReactNode; tam?: number }): Rea
 
 export type NombreIcono =
   | 'panel' | 'caja' | 'entrada' | 'salida' | 'tienda' | 'reporte' | 'candado'
-  | 'buscar' | 'alerta' | 'impresora' | 'etiqueta';
+  | 'buscar' | 'alerta' | 'impresora' | 'etiqueta'
+  // nuevos en la v5: el panel de valor, la sugerencia de compra y el conteo
+  | 'grafico' | 'carrito' | 'contar';
 
 export function Icono({ nombre, tam = 20 }: { nombre: NombreIcono; tam?: number }): React.JSX.Element {
   switch (nombre) {
@@ -116,6 +118,30 @@ export function Icono({ nombre, tam = 20 }: { nombre: NombreIcono; tam?: number 
         <Svg tam={tam}>
           <path d="M3 10.5 L10 3.5 L16.5 3.5 L16.5 10 L9.5 17 Z" />
           <circle cx="13.4" cy="7.4" r="1.1" fill="currentColor" stroke="none" />
+        </Svg>
+      );
+    case 'grafico':
+      return (
+        <Svg tam={tam}>
+          <path d="M2.5 17 L2.5 3" />
+          <path d="M2.5 17 L17.5 17" />
+          <path d="M5 13 L8.5 8.5 L12 11 L17 4.5" />
+        </Svg>
+      );
+    case 'carrito':
+      return (
+        <Svg tam={tam}>
+          <path d="M2.5 3 L4.5 3 L6.5 12.5 L15.5 12.5 L17 6 L5.2 6" />
+          <circle cx="7.5" cy="16" r="1.3" />
+          <circle cx="14.5" cy="16" r="1.3" />
+        </Svg>
+      );
+    case 'contar':
+      return (
+        <Svg tam={tam}>
+          <rect x="3.5" y="2.5" width="13" height="15" rx="2" />
+          <path d="M6.5 7 L8 8.5 L11 5.5" />
+          <path d="M6.5 12.5 L13.5 12.5" />
         </Svg>
       );
   }

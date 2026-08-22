@@ -1,13 +1,17 @@
 /* ---------------------------------------------------------------------------
- * Salidas a sucursal. Port de `SalidaPage` de `sfida_paginas.py`.
+ * Salidas a sucursal.
  *
- * Reglas propias de esta pantalla:
- *  - El número de vale es EDITABLE. Se propone un correlativo, pero se puede
- *    escribir el de una boleta física; avisa si ese número ya existe.
- *  - Nunca se puede sacar más de lo que hay. Se valida DOS veces: al agregar
- *    la línea y otra vez al guardar (esa segunda la hace el núcleo).
- *  - La casilla «Imprimir el vale al guardar» viene MARCADA de fábrica.
- *  - La observación ahora sí se guarda (CAMBIOS_DELIBERADOS.md punto 2).
+ * CAMBIOS DE LA v5:
+ *   - El N° de vale lo genera el sistema y YA NO es editable.
+ *   - «Quién entrega» y «quién recibe» salieron de la pantalla: en el ticket
+ *     van como renglones en blanco para llenar a mano sobre la firma.
+ *   - Se puede elegir la unidad de cada línea (reparto 500 ML de algo cuyo
+ *     stock se lleva en litros).
+ *
+ * Reglas que NO cambian:
+ *   - Nunca se puede sacar más de lo que hay. Se valida DOS veces: al agregar
+ *     la línea y otra vez al guardar (esa segunda la hace el núcleo).
+ *   - La casilla «Imprimir el vale al guardar» viene MARCADA de fábrica.
  * ------------------------------------------------------------------------- */
 import { useCallback, useEffect, useState } from 'react';
 
@@ -25,6 +29,7 @@ import {
   ComboArticulo,
   Etiqueta,
   Selector,
+  SelectorUnidad,
   SpinNumero,
   Tabla,
   dmy,
@@ -33,10 +38,12 @@ import {
   useDebounce,
   usarConfirmacion,
 } from '../ui/base';
+import { convertirAStock } from '../ui/unidades';
 
 interface Linea {
   articuloId: number;
   cantidad: number;
+  unidad: string;
 }
 
 export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.JSX.Element {
@@ -44,18 +51,15 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
   const { pedir: confirmar, nodo: nodoConfirmacion } = usarConfirmacion();
 
   const [vale, setVale] = useState('');
-  const [valeManual, setValeManual] = useState(false);
-  const [valeExiste, setValeExiste] = useState(false);
   const [fecha, setFecha] = useState(hoyIso());
   const [sucursalId, setSucursalId] = useState<number | 0>(0);
-  const [entrega, setEntrega] = useState('');
-  const [recibe, setRecibe] = useState('');
   const [observacion, setObservacion] = useState('');
 
   const [sucursales, setSucursales] = useState<SucursalConTotales[]>([]);
   const [articulos, setArticulos] = useState<ArticuloListado[]>([]);
   const [elegido, setElegido] = useState<number | null>(null);
   const [cantidad, setCantidad] = useState(0);
+  const [unidad, setUnidad] = useState('');
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [imprimirAlGuardar, setImprimirAlGuardar] = useState(true);
 
@@ -71,10 +75,7 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
 
   const proponerVale = useCallback(async () => {
     const v = await pedir(window.sfida.salidas.siguienteVale());
-    if (v) {
-      setVale(v);
-      setValeManual(false);
-    }
+    if (v) setVale(v);
   }, [pedir]);
 
   useEffect(() => {
@@ -93,15 +94,6 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
     if (!vale) void proponerVale();
   }, [vale, proponerVale]);
 
-  // Avisa al toque si ese número de vale ya está usado.
-  useEffect(() => {
-    if (!vale.trim()) {
-      setValeExiste(false);
-      return;
-    }
-    void pedir(window.sfida.salidas.existeVale(vale)).then((e) => setValeExiste(Boolean(e)));
-  }, [vale, pedir, refrescos]);
-
   useEffect(() => {
     let vivo = true;
     void pedir(window.sfida.salidas.listar(busqueda, filtroSuc || null)).then((h) => {
@@ -116,29 +108,46 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
 
   const articuloDe = (id: number): ArticuloListado | undefined => articulos.find((a) => a.id === id);
 
-  /** Stock disponible descontando lo ya cargado en el vale en curso. */
+  useEffect(() => {
+    setUnidad(elegido ? (articuloDe(elegido)?.unidad ?? '') : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elegido, articulos]);
+
+  /**
+   * Stock disponible, en la unidad de STOCK, descontando lo ya cargado en el
+   * vale en curso (que puede estar en otra unidad).
+   */
   const disponible = (id: number): number => {
     const a = articuloDe(id);
-    const ya = lineas.filter((l) => l.articuloId === id).reduce((s, l) => s + l.cantidad, 0);
-    return (a?.stock ?? 0) - ya;
+    if (!a) return 0;
+    const ya = lineas
+      .filter((l) => l.articuloId === id)
+      .reduce((s, l) => s + convertirAStock(l.cantidad, l.unidad, a.unidad), 0);
+    return a.stock - ya;
   };
 
   function agregar(): void {
     if (!elegido) return avisar('Elija un artículo de la lista.', 'err');
     if (cantidad <= 0) return avisar('La cantidad debe ser mayor a cero.', 'err');
+    const a = articuloDe(elegido)!;
+    const u = unidad || a.unidad;
+    // El disponible se compara en la unidad de STOCK: si se piden 500 ML de
+    // algo que se lleva en litros, hay que convertir antes de comparar.
+    const enStock = convertirAStock(cantidad, u, a.unidad);
     const disp = disponible(elegido);
-    const a = articuloDe(elegido);
-    if (cantidad > disp + 0.0001) {
-      return avisar(`Stock insuficiente: solo quedan ${fmtNum(disp)} ${a?.unidad ?? ''} de ${a?.nombre}.`, 'err');
+    if (enStock > disp + 0.0001) {
+      return avisar(
+        `Stock insuficiente: solo quedan ${fmtNum(disp)} ${a.unidad} de ${a.nombre}.`,
+        'err',
+      );
     }
-    setLineas((prev) => [...prev, { articuloId: elegido, cantidad }]);
+    setLineas((prev) => [...prev, { articuloId: elegido, cantidad, unidad: u }]);
     setElegido(null);
     setCantidad(0);
   }
 
   function limpiar(): void {
     setLineas([]);
-    setRecibe('');
     setObservacion('');
     setFecha(hoyIso());
     void proponerVale();
@@ -147,21 +156,21 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
   async function guardar(): Promise<void> {
     const id = await pedir(
       window.sfida.salidas.registrar({
-        nroVale: vale,
         fecha,
         sucursalId: sucursalId || null,
-        entregadoPor: entrega,
-        recibidoPor: recibe,
         observacion,
-        items: lineas.map((l) => [l.articuloId, l.cantidad] as [number, number]),
+        items: lineas.map((l) => ({
+          articuloId: l.articuloId,
+          cantidad: l.cantidad,
+          unidad: l.unidad,
+        })),
       }),
     );
     if (id === null) return;
-    const unidades = lineas.reduce((s, l) => s + l.cantidad, 0);
     const nombreSuc = sucursales.find((s) => s.id === sucursalId)?.nombre ?? '';
     const deseaImprimir = imprimirAlGuardar;
     limpiar();
-    avisar(`Vale guardado: ${fmtNum(unidades)} unidades entregadas a ${nombreSuc}.`, 'ok');
+    avisar(`Vale ${vale} guardado y entregado a ${nombreSuc}.`, 'ok');
     refrescarTodo();
     if (deseaImprimir) setImprimiendo(id);
   }
@@ -180,17 +189,13 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
   return (
     <div className="flex flex-col gap-4 p-5">
       <Caja titulo="Vale de salida">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div>
-            <Etiqueta>N° de vale (editable)</Etiqueta>
-            <Campo
-              valor={vale}
-              alCambiar={(v) => {
-                setVale(v);
-                setValeManual(true);
-              }}
-              mayusculas
-            />
+            <Etiqueta>N° de vale</Etiqueta>
+            {/* v5: lo genera el sistema, ya no se escribe a mano. */}
+            <div className="rounded-lg border border-[#d9dfe8] bg-[#f2f5f9] px-3 py-2.5 text-[14px] font-semibold text-texto">
+              {vale || '…'}
+            </div>
           </div>
           <div>
             <Etiqueta>Fecha</Etiqueta>
@@ -209,31 +214,13 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
             />
           </div>
           <div>
-            <Etiqueta>Entregado por</Etiqueta>
-            <Campo valor={entrega} alCambiar={setEntrega} mayusculas placeholder="QUIÉN ENTREGA" />
-          </div>
-          <div>
-            <Etiqueta>Recibido por</Etiqueta>
-            <Campo valor={recibe} alCambiar={setRecibe} mayusculas placeholder="QUIÉN RECIBE" />
+            <Etiqueta>Observación</Etiqueta>
+            <Campo valor={observacion} alCambiar={setObservacion} placeholder="Opcional, sale impresa" />
           </div>
         </div>
-
-        <div className="mt-2 flex flex-wrap items-center gap-3">
-          <p className={`text-[12px] ${!vale.trim() || valeExiste ? 'text-coral' : 'text-suave'}`}>
-            {!vale.trim()
-              ? 'Escriba el número del vale.'
-              : valeExiste
-                ? `Ojo: el vale ${vale} ya fue registrado antes.`
-                : valeManual
-                  ? 'Número escrito a mano (el de su boleta física).'
-                  : 'Correlativo del sistema. Puede cambiarlo si su boleta física tiene otro número.'}
-          </p>
-          <Boton tono="claro" onClick={proponerVale}>Usar el correlativo del sistema</Boton>
-          <div className="min-w-[240px] flex-1">
-            {/* La observación ahora SÍ se guarda y sale impresa en el vale. */}
-            <Campo valor={observacion} alCambiar={setObservacion} placeholder="Observación (opcional, sale impresa en el vale)" />
-          </div>
-        </div>
+        <p className="mt-2 text-[12px] text-suave">
+          Quién entrega y quién recibe se escriben a mano sobre las firmas del ticket impreso.
+        </p>
       </Caja>
 
       <Caja titulo="Artículos que se reparten">
@@ -248,9 +235,17 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
                 : `Disponible: ${fmtNum(dispElegido)} ${artElegido?.unidad ?? ''}`}
             </span>
           </div>
-          <div className="w-[150px]">
+          <div className="w-[140px]">
             <Etiqueta>Cantidad</Etiqueta>
-            <SpinNumero valor={cantidad} alCambiar={setCantidad} />
+            <SpinNumero valor={cantidad} alCambiar={setCantidad} decimales={2} />
+          </div>
+          <div className="w-[170px]">
+            <Etiqueta>Unidad</Etiqueta>
+            <SelectorUnidad
+              unidadStock={artElegido?.unidad ?? null}
+              valor={unidad}
+              alCambiar={setUnidad}
+            />
           </div>
           <Boton tono="verde" onClick={agregar}>Agregar</Boton>
         </div>
@@ -260,7 +255,19 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
             columnas={[
               { clave: 'art', titulo: 'Artículo', render: (l: Linea) => { const a = articuloDe(l.articuloId); return a ? `${a.codigo} | ${a.nombre}` : '?'; } },
               { clave: 'cant', titulo: 'Cantidad', ancho: '110px', derecha: true, render: (l) => fmtNum(l.cantidad) },
-              { clave: 'uni', titulo: 'Unidad', ancho: '110px', render: (l) => articuloDe(l.articuloId)?.unidad ?? '' },
+              { clave: 'uni', titulo: 'Unidad', ancho: '100px', render: (l) => l.unidad },
+              {
+                clave: 'conv', titulo: 'Sale del stock', ancho: '130px', derecha: true,
+                render: (l) => {
+                  const a = articuloDe(l.articuloId);
+                  if (!a || l.unidad === a.unidad) return <span className="text-suave">—</span>;
+                  return (
+                    <span className="text-suave">
+                      {fmtNum(convertirAStock(l.cantidad, l.unidad, a.unidad))} {a.unidad}
+                    </span>
+                  );
+                },
+              },
               { clave: 'queda', titulo: 'Queda en almacén', ancho: '150px', derecha: true, render: (l) => fmtNum(disponible(l.articuloId)) },
               {
                 clave: 'quitar', titulo: '', ancho: '80px',
@@ -295,7 +302,10 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
         titulo="Historial de repartos"
         acciones={
           <div className="flex flex-wrap items-center gap-2">
-            <Buscador valor={texto} alCambiar={setTexto} placeholder="Buscar por vale o quién recibió…" className="w-[240px]" />
+            {/* El buscador mira el N° de vale y el nombre de la sucursal, que
+                es lo que hace `listarSalidas()`. Antes decía «o quién recibió»
+                y eso nunca fue cierto: buscar un nombre no devolvía nada. */}
+            <Buscador valor={texto} alCambiar={setTexto} placeholder="Buscar por N° de vale o sucursal…" className="w-[240px]" />
             <Selector
               valor={filtroSuc}
               alCambiar={setFiltroSuc}
@@ -313,7 +323,11 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
             { clave: 'fecha', titulo: 'Fecha', ancho: '110px', render: (s: SalidaListada) => dmy(s.fecha) },
             { clave: 'vale', titulo: 'Vale', ancho: '135px', render: (s) => <span className="font-medium">{s.nro_vale}</span> },
             { clave: 'suc', titulo: 'Sucursal', render: (s) => `${s.suc_codigo} - ${s.sucursal}` },
-            { clave: 'rec', titulo: 'Recibió', ancho: '175px', render: (s) => s.recibido_por || '-' },
+            // Los vales de la v5 ya no guardan quién recibió: ese nombre se
+            // escribe a mano sobre la firma del papel. La columna se conserva
+            // porque los vales VIEJOS sí lo tienen y sería raro esconderlo;
+            // para los nuevos muestra «—», que es la verdad.
+            { clave: 'rec', titulo: 'Recibió', ancho: '175px', render: (s) => s.recibido_por || '—' },
             { clave: 'items', titulo: 'Ítems', ancho: '85px', derecha: true, render: (s) => s.items },
             { clave: 'und', titulo: 'Unidades', ancho: '105px', derecha: true, render: (s) => fmtNum(s.unidades) },
           ]}
@@ -330,7 +344,12 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
       </Caja>
 
       <DlgDetalleSalida abierto={viendo !== null} salidaId={viendo} alCerrar={() => setViendo(null)} />
-      <DlgImprimir abierto={imprimiendo !== null} salidaId={imprimiendo} alCerrar={() => setImprimiendo(null)} />
+      <DlgImprimir
+        abierto={imprimiendo !== null}
+        tipo="salida"
+        id={imprimiendo}
+        alCerrar={() => setImprimiendo(null)}
+      />
       <DlgClave
         abierto={pidiendoClave}
         motivo="anular un vale de salida"

@@ -558,9 +558,16 @@ function TabDatos(): React.JSX.Element {
         <Caja titulo="Copia de seguridad">
           <p className="mb-3 text-[12px] break-all text-suave select-text">
             Base de datos: {info?.ruta ?? '…'}
-            <br />
-            Último respaldo sugerido: una vez por semana en una USB o carpeta de la nube.
           </p>
+          <div className="mb-3 rounded-lg bg-verde-clr px-3.5 py-2.5 text-[12px] text-verde">
+            <b>El programa se respalda solo.</b> Cada vez que se abre guarda una copia en la
+            subcarpeta <b>respaldos</b>, y conserva las <b>10 más recientes</b>. Si algo se cargó
+            mal, ahí está el archivo de antes.
+            <br />
+            Eso protege de un error de digitación, pero <b>no</b> de que se rompa el disco o se
+            pierda la computadora: para eso hace falta una copia <b>fuera</b> de esta PC, en una
+            USB o en la nube. Ese es el botón de acá abajo, y conviene usarlo una vez por semana.
+          </div>
           <div className="flex flex-wrap gap-2">
             <Boton
               tono="verde"

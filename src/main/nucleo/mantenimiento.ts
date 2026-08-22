@@ -83,9 +83,27 @@ export function cargarCatalogoSugerido(db: BaseDatos): number {
  * Delimitador `;` y codificación utf-8 CON BOM, para que Excel en español lo
  * abra bien de un doble clic.
  */
+/**
+ * Un texto que Excel interpretaría como FÓRMULA en vez de como dato.
+ *
+ * Excel y LibreOffice tratan como fórmula todo lo que empieza con `=`, `+`,
+ * `@` o `-`, y algunas fórmulas pueden ejecutar programas. Los nombres de los
+ * artículos entran por CSV, así que un nombre como `=algo` volvería a salir en
+ * el reporte exportado y se ejecutaría al abrirlo. Es rebuscado, pero el
+ * remedio son dos líneas y toda esta app termina en Excel.
+ *
+ * Los números negativos legítimos (-5, -3.5) NO cuentan: son datos.
+ */
+function pareceFormula(t: string): boolean {
+  if (!/^[=+@\t\r-]/.test(t)) return false;
+  return !/^-?\d+([.,]\d+)?$/.test(t);
+}
+
 export function exportarCsv(ruta: string, encabezados: string[], filas: unknown[][]): string {
   const escapar = (v: unknown): string => {
-    const t = String(v ?? '');
+    let t = String(v ?? '');
+    // El apóstrofo delante le dice a la planilla «esto es texto, no cuenta».
+    if (pareceFormula(t)) t = `'${t}`;
     return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
   };
   const lineas = [encabezados.map(escapar).join(';')];

@@ -20,9 +20,22 @@ import type { Database } from 'better-sqlite3';
 
 import type { AnchoPapel } from '../../compartido/contrato';
 import { getConfig } from '../nucleo/config';
-import { cabeceraSalida, detalleSalida, listarSalidas } from '../nucleo/movimientos';
+import {
+  cabeceraIngreso,
+  cabeceraSalida,
+  detalleIngreso,
+  detalleSalida,
+  listarIngresos,
+  listarSalidas,
+} from '../nucleo/movimientos';
 import { capturarVale, pdfVale, vistaPrevia } from './imprimir';
-import { COLUMNAS, textoTicket, type DatosVale } from './ticket';
+import {
+  COLUMNAS,
+  textoTicket,
+  textoTicketIngreso,
+  type DatosTicketIngreso,
+  type DatosVale,
+} from './ticket';
 
 export function verificacionImpresionActiva(): boolean {
   return Boolean((process.env.SFIDA_VERIFICAR_IMPRESION || '').trim());
@@ -52,7 +65,7 @@ export async function verificarImpresion(db: Database): Promise<void> {
   console.log(`Vale de prueba: ${elegido.nro_vale} · ${elegido.sucursal} · ${elegido.items} líneas\n`);
 
   const cab = cabeceraSalida(db, elegido.id)!;
-  const datos: DatosVale = {
+  const vale: DatosVale = {
     cab: { ...cab, items: 0, unidades: 0 },
     det: detalleSalida(db, elegido.id),
     empresa: getConfig(db, 'empresa', 'SFIDA') ?? 'SFIDA',
@@ -61,16 +74,18 @@ export async function verificarImpresion(db: Database): Promise<void> {
     impresoEl: '22/08/2026 09:30',
   };
 
+  const comp = { tipo: 'salida', datos: vale } as const;
+
   let fallas = 0;
   const altos: number[] = [];
 
   for (const anchoMm of [80, 58, 210] as AnchoPapel[]) {
-    const previa = await vistaPrevia(datos, anchoMm);
+    const previa = await vistaPrevia(comp, anchoMm);
     const ruta = join(carpeta, `vale_${anchoMm}mm.pdf`);
-    const r = await pdfVale(datos, anchoMm, ruta);
+    const r = await pdfVale(comp, anchoMm, ruta);
     // Además del PDF, una foto: se mira más rápido y sirve para comparar
     // contra el ticket que salga de la impresora de verdad.
-    await capturarVale(datos, anchoMm, ruta.replace(/\.pdf$/, '.png'));
+    await capturarVale(comp, anchoMm, ruta.replace(/\.pdf$/, '.png'));
 
     const cols = COLUMNAS[anchoMm]!;
     const entra = previa.lineaMasLarga === null || previa.lineaMasLarga <= cols;
@@ -91,8 +106,8 @@ export async function verificarImpresion(db: Database): Promise<void> {
   }
 
   /* --------- comprobaciones sobre el texto, sin depender del render ------- */
-  const t80 = textoTicket(datos, 80).split('\n');
-  const t58 = textoTicket(datos, 58).split('\n');
+  const t80 = textoTicket(vale, 80).split('\n');
+  const t58 = textoTicket(vale, 58).split('\n');
 
   const revisar = (nombre: string, cond: boolean, extra = ''): void => {
     if (!cond) fallas += 1;
@@ -129,6 +144,89 @@ export async function verificarImpresion(db: Database): Promise<void> {
   const SANGRIA = 12;
   const desalineadas = t80.filter((l) => /^ +(OFI|LIM|ART)-\d+/.test(l) && l.search(/\S/) !== SANGRIA);
   revisar('el nombre del articulo y su codigo arrancan en la misma columna', desalineadas.length === 0);
+
+  /* ------------------------- el ticket de INGRESO (nuevo en la v5) -------- */
+  //
+  // Se verifica igual que el de salida y por el mismo motivo: es papel que sale
+  // de una impresora térmica de 80 o 58 mm, y si una línea se pasa del ancho,
+  // el ticket sale cortado. Que el de salida esté bien no dice nada del otro:
+  // son dos armadores distintos.
+  const ingresos = listarIngresos(db);
+  if (ingresos.length === 0) {
+    console.log('\n(no hay ingresos en la base: no se verificó el ticket de ingreso)');
+  } else {
+    const ing = [...ingresos].sort((a, b) => b.items - a.items)[0]!;
+    const cabIng = cabeceraIngreso(db, ing.id)!;
+    const detIng = detalleIngreso(db, ing.id);
+    const ticket: DatosTicketIngreso = {
+      nroDocumento: cabIng.nro_documento,
+      nroProveedor: cabIng.nro_proveedor,
+      tipoDoc: cabIng.tipo_doc,
+      fecha: cabIng.fecha,
+      proveedor: cabIng.proveedor ?? '',
+      observacion: cabIng.observacion ?? '',
+      det: detIng,
+      total: detIng.reduce((s, d) => s + d.cantidad * d.costo_unitario, 0),
+      empresa: vale.empresa,
+      empresaDir: vale.empresaDir,
+      empresaRuc: vale.empresaRuc,
+      impresoEl: vale.impresoEl,
+    };
+    const compIng = { tipo: 'ingreso', datos: ticket } as const;
+
+    console.log(`\n=== ticket de INGRESO ===`);
+    console.log(`Ingreso de prueba: ${ing.nro_documento} · ${ing.proveedor} · ${ing.items} líneas\n`);
+
+    const altosIng: number[] = [];
+    for (const anchoMm of [80, 58, 210] as AnchoPapel[]) {
+      const previa = await vistaPrevia(compIng, anchoMm);
+      const ruta = join(carpeta, `ingreso_${anchoMm}mm.pdf`);
+      const r = await pdfVale(compIng, anchoMm, ruta);
+      await capturarVale(compIng, anchoMm, ruta.replace(/\.pdf$/, '.png'));
+
+      const cols = COLUMNAS[anchoMm]!;
+      const entra = previa.lineaMasLarga === null || previa.lineaMasLarga <= cols;
+      if (!entra || !r.ok) fallas += 1;
+      if (anchoMm < 200) altosIng.push(previa.altoHojaMm);
+
+      console.log(`--- ${anchoMm} mm ---`);
+      console.log(`  alto de la hoja  : ${previa.altoHojaMm.toFixed(2)} mm`);
+      if (previa.lineaMasLarga !== null) {
+        console.log(
+          `  linea mas larga  : ${previa.lineaMasLarga} de ${cols}   ${entra ? 'OK' : '¡SE PASA DEL PAPEL!'}`,
+        );
+      }
+      console.log(`  PDF              : ${r.ok ? ruta : 'FALLÓ: ' + r.motivo}\n`);
+    }
+
+    const i80 = textoTicketIngreso(ticket, 80).split('\n');
+    const i58 = textoTicketIngreso(ticket, 58).split('\n');
+
+    console.log('=== comprobaciones del ticket de ingreso ===');
+    revisar('ninguna linea de 80 mm se pasa de 42', i80.every((l) => l.length <= 42));
+    revisar('ninguna linea de 58 mm se pasa de 30', i58.every((l) => l.length <= 30));
+    revisar(
+      'el titulo es INGRESOS ALMACEN UTILITARIOS',
+      i80.some((l) => l.includes('INGRESOS ALMACEN UTILITARIOS')),
+    );
+    revisar('sale el N° interno del sistema', i80.some((l) => l.includes(cabIng.nro_documento)));
+    revisar(
+      'sale el N° de la boleta del proveedor',
+      !cabIng.nro_proveedor || i80.some((l) => l.includes(cabIng.nro_proveedor)),
+      cabIng.nro_proveedor ? `(${cabIng.nro_proveedor})` : '(este ingreso no tiene)',
+    );
+    revisar('lleva las dos firmas', i80.some((l) => l.includes('CONFORME')));
+    revisar(
+      'debajo de cada firma hay renglon para el NOMBRE',
+      i80.some((l) => l.includes('NOMBRE')) && i58.some((l) => l.includes('NOMBRE')),
+    );
+    revisar('termina con 3 lineas en blanco', i80.slice(-3).every((l) => l.trim() === ''));
+    revisar(
+      'el alto de la hoja depende del contenido',
+      altosIng.length === 2 && Math.abs(altosIng[0]! - altosIng[1]!) > 0.5,
+      `80mm=${altosIng[0]?.toFixed(1)} 58mm=${altosIng[1]?.toFixed(1)}`,
+    );
+  }
 
   console.log(
     `\nResultado: ${fallas ? fallas + ' problema(s)' : 'sin problemas'}. Abrí los PDF de ${carpeta} y miralos.\n`,

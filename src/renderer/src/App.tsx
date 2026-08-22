@@ -2,14 +2,21 @@
  * El chasis: barra lateral, encabezado, transición entre pantallas y avisos.
  *
  * La transición sigue el orden del menú: bajando la página nueva entra por la
- * derecha, subiendo por la izquierda. 220 ms con curva de salida suave, igual
- * que `transicion_paginas()` en la versión Qt.
+ * derecha, subiendo por la izquierda. Los tiempos y curvas NO se escriben acá:
+ * salen de `estado/animaciones`, que es el vocabulario común de toda la app.
  * ------------------------------------------------------------------------- */
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { ProveedorApp, useApp } from './estado/app';
-import { ProveedorAnimaciones, useAnimaciones } from './estado/animaciones';
+import {
+  CURVA,
+  NORMAL,
+  RAPIDO,
+  RESORTE,
+  ProveedorAnimaciones,
+  useAnimaciones,
+} from './estado/animaciones';
 import { DlgBusquedaGlobal } from './dialogos/BusquedaGlobal';
 import { PaginaIngresos } from './paginas/Ingresos';
 import { PaginaMaestro } from './paginas/Maestro';
@@ -33,11 +40,11 @@ const MENU: Array<{
   icono: NombreIcono;
 }> = [
   { clave: 'panel', menu: 'Panel', titulo: 'Panel de control', subtitulo: 'Resumen del almacén al día de hoy', icono: 'panel' },
-  { clave: 'stock', menu: 'Artículos y stock', titulo: 'Artículos y stock', subtitulo: 'Todo lo que hay en el almacén', icono: 'caja' },
+  { clave: 'stock', menu: 'Artículos y stock', titulo: 'Artículos y stock', subtitulo: 'Todo lo que hay en el almacén, qué comprar y el conteo físico', icono: 'caja' },
   { clave: 'ingresos', menu: 'Ingresos (boletas)', titulo: 'Ingresos por boleta', subtitulo: 'Mercadería que entra al almacén', icono: 'entrada' },
   { clave: 'salidas', menu: 'Salidas a sucursal', titulo: 'Salidas a sucursal', subtitulo: 'Reparto de mercadería a los locales', icono: 'salida' },
   { clave: 'sucursales', menu: 'Sucursales', titulo: 'Sucursales', subtitulo: 'Locales a los que se reparte la mercadería', icono: 'tienda' },
-  { clave: 'reportes', menu: 'Reportes', titulo: 'Reportes', subtitulo: 'Consumo por sucursal, kardex, ranking e historial de precios', icono: 'reporte' },
+  { clave: 'reportes', menu: 'Reportes', titulo: 'Reportes', subtitulo: 'Valor del almacén, inversión por tienda, kardex y precios', icono: 'reporte' },
   { clave: 'maestro', menu: 'Control Maestro', titulo: 'Control Maestro', subtitulo: 'Sección restringida: solo con contraseña', icono: 'candado' },
 ];
 
@@ -133,11 +140,14 @@ function Chasis(): React.JSX.Element {
             <motion.div
               key={pagina}
               custom={direccion}
-              initial={anim ? { opacity: 0, x: direccion * 34 } : false}
-              animate={{ opacity: 1, x: 0 }}
-              exit={anim ? { opacity: 0, x: direccion * -34 } : undefined}
-              // 220 ms y curva de salida suave, igual que la versión Qt.
-              transition={{ duration: anim ? 0.22 : 0, ease: [0.33, 1, 0.68, 1] }}
+              // Además del deslizamiento horizontal (la dirección sale del
+              // orden del menú), la pantalla entra desde un poco más lejos y
+              // creciendo apenas. Ese 2 % de escala es lo que separa un cambio
+              // de página de un pase de diapositivas.
+              initial={anim ? { opacity: 0, x: direccion * 28, scale: 0.985 } : false}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={anim ? { opacity: 0, x: direccion * -22, scale: 0.99 } : undefined}
+              transition={{ duration: anim ? NORMAL : 0, ease: CURVA }}
               className="absolute inset-0 overflow-auto"
             >
               <Pagina clave={pagina} irA={irA} extra={extra} />
@@ -226,13 +236,16 @@ function BarraLateral({
             className="absolute right-3 left-3 rounded-lg bg-coral"
             initial={false}
             animate={{ top: pastilla.top, height: pastilla.alto }}
-            transition={anim ? { duration: 0.22, ease: [0.33, 1, 0.68, 1] } : { duration: 0 }}
+            // Con resorte la pastilla «viaja» al botón nuevo en vez de
+            // desplazarse a velocidad constante. Es la misma sensación que la
+            // de los chips, y que las dos coincidan es parte del asunto.
+            transition={anim ? RESORTE : { duration: 0 }}
           />
         )}
         {MENU.map((m, i) => {
           const activo = m.clave === pagina;
           return (
-            <button
+            <motion.button
               key={m.clave}
               // `data-pagina` lo usa el modo captura para recorrer las
               // pantallas sin depender del texto visible.
@@ -241,15 +254,23 @@ function BarraLateral({
                 if (el) refs.current.set(m.clave, el);
               }}
               onClick={() => irA(m.clave)}
+              whileTap={anim ? { scale: 0.975 } : undefined}
+              transition={{ duration: RAPIDO, ease: CURVA }}
               className={`relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[14px] transition-colors ${
                 activo ? 'font-semibold text-white' : 'text-lateral-txt hover:bg-lateral-hov hover:text-white'
               } ${i === 6 ? 'mt-3' : ''}`}
             >
-              <span className="shrink-0">
+              <motion.span
+                className="shrink-0"
+                // El icono de la sección activa crece apenas: es la señal más
+                // barata de «estás acá» sin agregar nada a la pantalla.
+                animate={anim ? { scale: activo ? 1.08 : 1 } : false}
+                transition={{ duration: NORMAL, ease: CURVA }}
+              >
                 <Icono nombre={m.icono} tam={19} />
-              </span>
+              </motion.span>
               <span className="truncate">{m.menu}</span>
-            </button>
+            </motion.button>
           );
         })}
       </nav>

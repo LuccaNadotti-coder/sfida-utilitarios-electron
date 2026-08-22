@@ -5,7 +5,7 @@
  * conservan porque las pruebas se apoyan unas en otras: el stock que deja una
  * es el que verifica la siguiente.
  * ------------------------------------------------------------------------- */
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Database } from 'better-sqlite3';
@@ -27,12 +27,13 @@ import {
 } from '../src/main/nucleo/categorias';
 import { ErrorNegocio } from '../src/main/nucleo/errores';
 import {
+  cabeceraIngreso,
+  cabeceraSalida,
   detalleSalida,
   eliminarIngreso,
   eliminarSalida,
+  listarSalidas,
   registrarAjuste,
-  registrarIngreso,
-  registrarSalida,
   siguienteNroVale,
 } from '../src/main/nucleo/movimientos';
 import { exportarCsv, respaldarBd } from '../src/main/nucleo/mantenimiento';
@@ -43,8 +44,7 @@ import {
   kardex,
 } from '../src/main/nucleo/reportes';
 import { alertasStockMinimo, nivelesStock, resumenPanel, stockDe } from '../src/main/nucleo/stock';
-import { hoy } from '../src/main/nucleo/textos';
-import { carpetaTemporal } from './ayudas';
+import { carpetaTemporal, ingresarStock, sacarStock } from './ayudas';
 
 let tmp: ReturnType<typeof carpetaTemporal>;
 let db: Database;
@@ -52,6 +52,7 @@ let cats: Record<string, number>;
 let a1: number;
 let a2: number;
 let a3: number;
+let aX: number;
 let s1: number;
 let s2: number;
 let ing: number;
@@ -107,32 +108,60 @@ describe('maestros', () => {
 
 describe('ingreso por boleta', () => {
   it('ingreso registrado', () => {
-    ing = registrarIngreso(db, 'BOLETA', 'B001-1234', hoy(), 'Librería Sol', 'compra mensual', [
-      [a1, 100, 0.8],
-      [a2, 50, 12.5],
-      [a3, 12, 18.0],
-    ]);
+    ing = ingresarStock(
+      db,
+      [
+        [a1, 100, 0.8],
+        [a2, 50, 12.5],
+        [a3, 12, 18.0],
+      ],
+      { nroProveedor: 'B001-1234', proveedor: 'Librería Sol', observacion: 'compra mensual' },
+    );
     expect(ing).toBeGreaterThan(0);
+  });
+
+  it('el N° interno lo genera el sistema', () => {
+    // v5: `nro_documento` es interno y automático; el del proveedor va aparte.
+    const cab = cabeceraIngreso(db, ing)!;
+    expect(cab.nro_documento).toMatch(/^I\d{4}-\d{4}$/);
+    expect(cab.nro_proveedor).toBe('B001-1234');
   });
 
   it('stock tras ingreso lapiceros = 100', () => {
     expect(stockDe(db, a1)).toBe(100);
   });
 
-  it('bloquea boleta duplicada', () => {
+  it('bloquea la misma boleta del mismo proveedor', () => {
+    aX = guardarArticulo(db, 'ART-9000', 'Auxiliar de pruebas', null, 'UND', 0);
+    // v5: la regla se apoya en proveedor + N° del proveedor, que es lo que
+    // de verdad identifica el papel.
     expect(() =>
-      registrarIngreso(db, 'BOLETA', 'B001-1234', hoy(), 'X', '', [[a1, 5, 1]]),
+      ingresarStock(db, [[aX, 5, 1]], { nroProveedor: 'B001-1234', proveedor: 'Librería Sol' }),
     ).toThrow(ErrorNegocio);
+  });
+
+  it('el mismo número de OTRO proveedor sí entra', () => {
+    // Se usa un artículo aparte: las pruebas de stock de más abajo cuentan
+    // sobre a1 y no se pueden ensuciar acá.
+    const id = ingresarStock(db, [[aX, 1, 1]], {
+      nroProveedor: 'B001-1234',
+      proveedor: 'Otra Distribuidora',
+    });
+    expect(id).toBeGreaterThan(0);
+  });
+
+  it('sin número de proveedor no se puede comprobar y se deja pasar', () => {
+    // Hay boletas sin número legible: bloquearlas trabaría el almacén.
+    const id = ingresarStock(db, [[aX, 1, 1]], { proveedor: 'Sin Numero SA' });
+    expect(id).toBeGreaterThan(0);
   });
 
   it('valida formato de fecha', () => {
-    expect(() =>
-      registrarIngreso(db, 'BOLETA', 'B001-9999', '12/05/2026', 'X', '', [[a1, 5, 1]]),
-    ).toThrow(ErrorNegocio);
+    expect(() => ingresarStock(db, [[aX, 5, 1]], { fecha: '12/05/2026' })).toThrow(ErrorNegocio);
   });
 
   it('exige al menos un item', () => {
-    expect(() => registrarIngreso(db, 'BOLETA', 'B001-8888', hoy(), 'X', '', [])).toThrow(ErrorNegocio);
+    expect(() => ingresarStock(db, [])).toThrow(ErrorNegocio);
   });
 });
 
@@ -141,11 +170,19 @@ describe('salida a sucursal', () => {
 
   it('salida registrada', () => {
     v1 = siguienteNroVale(db);
-    const sal = registrarSalida(db, v1, hoy(), s1, 'Almacen', 'Ana', 'reparto semanal', [
+    const sal = sacarStock(db, s1, [
       [a1, 30],
       [a2, 10],
-    ]);
+    ], { observacion: 'reparto semanal' });
     expect(sal).toBeGreaterThan(0);
+  });
+
+  it('el N° de vale lo genera el sistema y NO es editable', () => {
+    // v5: ya no se puede escribir a mano. `registrarSalida` ni siquiera
+    // recibe el número: lo asigna solo.
+    const cab = cabeceraSalida(db, listarSalidas(db)[0]!.id)!;
+    expect(cab.nro_vale).toBe(v1);
+    expect(cab.nro_vale).toMatch(/^V\d{4}-\d{4}$/);
   });
 
   it('stock tras salida lapiceros = 70', () => {
@@ -157,7 +194,7 @@ describe('salida a sucursal', () => {
   });
 
   it('stock lapiceros = 50 tras 2 salidas', () => {
-    registrarSalida(db, siguienteNroVale(db), hoy(), s2, 'Almacen', 'Luis', '', [
+    sacarStock(db, s2, [
       [a1, 20],
       [a3, 4],
     ]);
@@ -166,7 +203,7 @@ describe('salida a sucursal', () => {
 
   it('bloquea salida sin stock', () => {
     try {
-      registrarSalida(db, 'V-TEST', hoy(), s1, '', '', '', [[a3, 999]]);
+      sacarStock(db, s1, [[a3, 999]]);
       expect.unreachable('debía lanzar');
     } catch (e) {
       expect(e).toBeInstanceOf(ErrorNegocio);
@@ -177,7 +214,7 @@ describe('salida a sucursal', () => {
   it('suma lineas repetidas antes de validar', () => {
     // 30 + 30 = 60 supera el stock de 50 -> debe bloquear
     expect(() =>
-      registrarSalida(db, 'V-TEST2', hoy(), s1, '', '', '', [
+      sacarStock(db, s1, [
         [a1, 30],
         [a1, 30],
       ]),
@@ -186,7 +223,7 @@ describe('salida a sucursal', () => {
   });
 
   it('agrupa lineas repetidas en el vale', () => {
-    const salAg = registrarSalida(db, 'V-AGRUP', hoy(), s1, '', '', '', [
+    const salAg = sacarStock(db, s1, [
       [a1, 5],
       [a1, 5],
     ]);
@@ -196,9 +233,7 @@ describe('salida a sucursal', () => {
   });
 
   it('exige sucursal', () => {
-    expect(() => registrarSalida(db, 'V-TEST3', hoy(), null, '', '', '', [[a1, 1]])).toThrow(
-      ErrorNegocio,
-    );
+    expect(() => sacarStock(db, 0, [[a1, 1]])).toThrow(ErrorNegocio);
   });
 });
 
@@ -208,7 +243,7 @@ describe('alertas de stock minimo', () => {
   });
 
   it('jabon aparece en alertas al bajar del minimo', () => {
-    registrarSalida(db, 'V-AL-1', hoy(), s1, '', '', '', [[a3, 6]]); // jabon queda 2
+    sacarStock(db, s1, [[a3, 6]]); // jabon queda 2
     const al = alertasStockMinimo(db);
     expect(al.some((a) => a.nombre.includes('JABON'))).toBe(true);
   });
@@ -245,14 +280,14 @@ describe('reportes', () => {
 
   it('panel resumen', () => {
     const res = resumenPanel(db);
-    expect(res.articulos).toBe(3);
+    expect(res.articulos).toBe(4);
     expect(res.sucursales).toBe(2);
     expect(res.salidas).toBeGreaterThanOrEqual(3);
   });
 
   it('niveles de stock para la dona suman los articulos activos', () => {
     const n = nivelesStock(db);
-    expect(n.ok + n.por_agotarse + n.bajo_minimo).toBe(3);
+    expect(n.ok + n.por_agotarse + n.bajo_minimo).toBe(4);
   });
 });
 
@@ -279,7 +314,7 @@ describe('anulaciones', () => {
 
   it('anular salida devuelve el stock', () => {
     const stockPrev = stockDe(db, a1);
-    const salTmp = registrarSalida(db, 'V-DEL', hoy(), s1, '', '', '', [[a1, 5]]);
+    const salTmp = sacarStock(db, s1, [[a1, 5]]);
     eliminarSalida(db, salTmp);
     expect(stockDe(db, a1)).toBe(stockPrev);
   });
@@ -308,6 +343,33 @@ describe('exportacion', () => {
       [3, 4],
     ]);
     expect(statSync(csvp).size).toBeGreaterThan(0);
+  });
+
+  it('neutraliza lo que Excel tomaria por formula', () => {
+    // Los nombres de los artículos entran por CSV y vuelven a salir en los
+    // reportes. Sin esto, un nombre que empieza con «=» se ejecuta al abrir el
+    // archivo exportado.
+    const csvp = join(tmp.ruta, 'formula.csv');
+    exportarCsv(csvp, ['Articulo'], [
+      ['=1+1'],
+      ['+SUM(A1)'],
+      ['@SUM(A1)'],
+      ['-CMD()'],
+    ]);
+    const texto = readFileSync(csvp, 'utf8');
+    for (const peligroso of ['=1+1', '+SUM(A1)', '@SUM(A1)', '-CMD()']) {
+      expect(texto).toContain(`'${peligroso}`);
+    }
+  });
+
+  it('pero NO toca los numeros negativos, que son datos de verdad', () => {
+    const csvp = join(tmp.ruta, 'negativos.csv');
+    exportarCsv(csvp, ['Ajuste'], [['-5'], ['-3.5'], ['-12,75'], ['LEJIA']]);
+    const texto = readFileSync(csvp, 'utf8');
+    expect(texto).not.toContain("'-5");
+    expect(texto).not.toContain("'-3.5");
+    expect(texto).not.toContain("'-12,75");
+    expect(texto).not.toContain("'LEJIA");
   });
 
   it('crea respaldo', () => {

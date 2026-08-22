@@ -14,7 +14,7 @@ import { guardarArticulo } from '../src/main/nucleo/articulos';
 import { CAT_LIMPIEZA, CAT_OFICINA, listarCategorias } from '../src/main/nucleo/categorias';
 import { listarAuditoria } from '../src/main/nucleo/config';
 import { ErrorNegocio } from '../src/main/nucleo/errores';
-import { registrarIngreso } from '../src/main/nucleo/movimientos';
+
 import {
   actualizarCostoLinea,
   historialPrecios,
@@ -23,8 +23,8 @@ import {
   resumenPrecios,
   ultimoPrecio,
 } from '../src/main/nucleo/stock';
-import { fmtPrecio, fmtVariacion, hoy } from '../src/main/nucleo/textos';
-import { carpetaTemporal } from './ayudas';
+import { fmtPrecio, fmtVariacion } from '../src/main/nucleo/textos';
+import { carpetaTemporal, ingresarStock } from './ayudas';
 
 let tmp: ReturnType<typeof carpetaTemporal>;
 let db: Database;
@@ -38,10 +38,11 @@ beforeAll(() => {
   p1 = guardarArticulo(db, 'OFI-0001', 'Papel Bond A4 75GR', cats[CAT_OFICINA]!, 'MILLAR', 5);
   p2 = guardarArticulo(db, 'LIM-0001', 'Escoba', cats[CAT_LIMPIEZA]!, 'UNIDAD', 3);
 
-  registrarIngreso(db, 'BOLETA', 'B001-0001', '2026-01-10', 'distribuidora lima', '', [
-    [p1, 10, 14.5],
-    [p2, 5, 0],
-  ]);
+  ingresarStock(db, [[p1, 10, 14.5], [p2, 5, 0]], {
+    nroProveedor: 'B001-0001',
+    fecha: '2026-01-10',
+    proveedor: 'distribuidora lima',
+  });
 });
 
 afterAll(() => {
@@ -63,9 +64,7 @@ describe('precios', () => {
   });
 
   it('bloquea precios negativos', () => {
-    expect(() => registrarIngreso(db, 'BOLETA', 'B-NEG', hoy(), '', '', [[p1, 1, -5]])).toThrow(
-      ErrorNegocio,
-    );
+    expect(() => ingresarStock(db, [[p1, 1, -5]], { nroProveedor: 'B-NEG' })).toThrow(ErrorNegocio);
   });
 
   it('ultimo_precio trae precio, fecha, proveedor y documento', () => {
@@ -73,7 +72,7 @@ describe('precios', () => {
     expect(u.precio).toBe(14.5);
     expect(u.fecha).toBe('2026-01-10');
     expect(u.proveedor).toBe('DISTRIBUIDORA LIMA');
-    expect(u.documento).toBe('BOLETA B001-0001');
+    expect(u.documento).toMatch(/^BOLETA I\d{4}-\d{4}$/);
   });
 
   it('ultimo_precio es None cuando nunca se cargo precio', () => {
@@ -81,10 +80,12 @@ describe('precios', () => {
   });
 
   it('ultimo_precio toma la compra mas nueva, no el promedio', () => {
-    registrarIngreso(db, 'FACTURA', 'F001-0002', '2026-03-05', 'Comercial Sur', '', [[p1, 20, 16.0]]);
-    registrarIngreso(db, 'BOLETA', 'B001-0003', '2026-06-20', 'Distribuidora Lima', '', [
-      [p1, 8, 12.0],
-    ]);
+    ingresarStock(db, [[p1, 20, 16.0]], {
+      tipoDoc: 'FACTURA', nroProveedor: 'F001-0002', fecha: '2026-03-05', proveedor: 'Comercial Sur',
+    });
+    ingresarStock(db, [[p1, 8, 12.0]], {
+      nroProveedor: 'B001-0003', fecha: '2026-06-20', proveedor: 'Distribuidora Lima',
+    });
     const u = ultimoPrecio(db, p1)!;
     expect(u.precio).toBe(12.0);
     expect(u.fecha).toBe('2026-06-20');
@@ -99,7 +100,7 @@ describe('precios', () => {
 
   it('historial_precios: trae documento, proveedor y cantidad', () => {
     const h = historialPrecios(db, p1);
-    expect(h[0]!.documento).toBe('BOLETA B001-0003');
+    expect(h[0]!.documento).toMatch(/^BOLETA I\d{4}-\d{4}$/);
     expect(h[0]!.proveedor).toBe('DISTRIBUIDORA LIMA');
     expect(h[0]!.cantidad).toBe(8);
   });

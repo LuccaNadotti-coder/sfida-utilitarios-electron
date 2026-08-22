@@ -1,5 +1,8 @@
 /* ---------------------------------------------------------------------------
  * Artículos y stock. Port de `StockPage` de `sfida_paginas.py`.
+ *
+ * En la v5 se le sumaron dos pestañas: «Qué comprar» y «Conteo físico». Viven
+ * acá y no en Reportes porque son tareas del almacén, no informes para leer.
  * ------------------------------------------------------------------------- */
 import { useEffect, useMemo, useState } from 'react';
 
@@ -8,6 +11,8 @@ import type { ClavePagina, DestinoExtra } from '../App';
 import { DlgAjuste } from '../dialogos/Ajuste';
 import { DlgArticulo } from '../dialogos/Articulo';
 import { useApp } from '../estado/app';
+import { PanelComprar } from './Comprar';
+import { PanelConteo } from './Conteo';
 import {
   Boton,
   Buscador,
@@ -25,6 +30,7 @@ import {
 } from '../ui/base';
 
 type Modo = 'todos' | 'bajo' | 'sin';
+type Seccion = 'articulos' | 'comprar' | 'conteo';
 
 export function PaginaStock({
   irA,
@@ -34,6 +40,7 @@ export function PaginaStock({
   extra: DestinoExtra | null;
 }): React.JSX.Element {
   const { pedir, avisar, refrescarTodo, refrescos } = useApp();
+  const [seccion, setSeccion] = useState<Seccion>('articulos');
   const [texto, setTexto] = useState('');
   const busqueda = useDebounce(texto);
   const [categoria, setCategoria] = useState<number | 0>(0);
@@ -105,79 +112,96 @@ export function PaginaStock({
 
   return (
     <div className="flex flex-col gap-4 p-5">
-      <Caja>
-        <div className="flex flex-wrap items-center gap-3">
-          <Buscador
-            valor={texto}
-            alCambiar={setTexto}
-            placeholder="Buscar por nombre, código o categoría…"
-            className="min-w-[280px] flex-1"
-          />
-          <Selector valor={categoria} alCambiar={setCategoria} opciones={opcionesCat} className="w-[200px]" />
-          <Chips
-            valor={modo}
-            alElegir={setModo}
-            opciones={[
-              { id: 'todos', texto: 'Todos' },
-              { id: 'bajo', texto: 'Bajo el mínimo' },
-              { id: 'sin', texto: 'Sin stock' },
-            ]}
-          />
-          <div className="flex-1" />
-          <Boton tono="verde" onClick={() => setEditando(null)}>
-            Nuevo artículo
-          </Boton>
-        </div>
-      </Caja>
-
-      <Tabla
-        columnas={[
-          { clave: 'codigo', titulo: 'Código', ancho: '100px', render: (f: FilaStock) => <span className="font-medium">{f.codigo}</span> },
-          { clave: 'nombre', titulo: 'Artículo', render: (f) => f.nombre },
-          { clave: 'cat', titulo: 'Categoría', ancho: '105px', render: (f) => <span className="text-suave">{categoriaCorta(f.categoria)}</span> },
-          { clave: 'uni', titulo: 'Unidad', ancho: '75px', render: (f) => <span className="text-suave">{f.unidad}</span> },
-          { clave: 'stock', titulo: 'Stock', ancho: '80px', derecha: true, render: (f) => fmtNum(f.stock) },
-          { clave: 'min', titulo: 'Mínimo', ancho: '80px', derecha: true, render: (f) => <span className="text-suave">{fmtNum(f.stock_minimo)}</span> },
-          {
-            clave: 'estado', titulo: 'Estado', ancho: '115px',
-            render: (f) => {
-              const [txt, clase] = estadoStock(f.stock, f.stock_minimo);
-              return <Pastilla clase={clase}>{txt}</Pastilla>;
-            },
-          },
-          { clave: 'precio', titulo: 'Último precio', ancho: '120px', derecha: true, render: (f) => fmtPrecio(f.ultimo_precio) },
-          { clave: 'fecha', titulo: 'Fecha', ancho: '105px', render: (f) => <span className="text-suave">{f.ultimo_precio ? dmy(f.ultima_fecha) : '—'}</span> },
+      <Chips
+        valor={seccion}
+        alElegir={setSeccion}
+        opciones={[
+          { id: 'articulos', texto: 'Artículos y stock' },
+          { id: 'comprar', texto: 'Qué comprar' },
+          { id: 'conteo', texto: 'Conteo físico' },
         ]}
-        filas={filas}
-        clave={(f) => f.id}
-        cargando={cargando}
-        seleccionada={sel}
-        alSeleccionar={(f) => setSel(f.id)}
-        alDobleClic={(f) => setEditando(f.id)}
-        vacio={{ titulo: 'Todavía no hay artículos', detalle: 'Usá «Nuevo artículo» o importá una lista desde Excel.' }}
-        sinResultados={
-          texto || categoria || modo !== 'todos'
-            ? { titulo: 'Ningún artículo coincide', detalle: 'Probá con otra palabra, otra categoría u otro filtro.' }
-            : undefined
-        }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[13px] text-suave">
-          {filas.length} {filas.length === 1 ? 'artículo' : 'artículos'}
-        </span>
-        <div className="flex-1" />
-        <Boton tono="claro" onClick={() => conSeleccion((id) => setEditando(id))}>Editar</Boton>
-        <Boton tono="ambar" onClick={() => conSeleccion((id) => setAjustando(id))}>Ajustar stock</Boton>
-        <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'kardex', id }))}>Ver kardex</Boton>
-        <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'precios', id }))}>Ver precios</Boton>
-        <Boton tono="claro" onClick={importar}>Importar de Excel</Boton>
-        <Boton tono="claro" onClick={async () => {
-          const r = await pedir(window.sfida.articulos.plantillaCsv());
-          if (r) avisar(`Plantilla guardada en ${r}. Llenala en Excel y usá «Importar de Excel».`, 'ok');
-        }}>Plantilla de carga</Boton>
-        <Boton tono="claro" onClick={exportar}>Exportar</Boton>
-      </div>
+      {seccion === 'comprar' && <PanelComprar />}
+      {seccion === 'conteo' && <PanelConteo />}
+
+      {seccion === 'articulos' && (
+        <>
+        <Caja>
+          <div className="flex flex-wrap items-center gap-3">
+            <Buscador
+              valor={texto}
+              alCambiar={setTexto}
+              placeholder="Buscar por nombre, código o categoría…"
+              className="min-w-[280px] flex-1"
+            />
+            <Selector valor={categoria} alCambiar={setCategoria} opciones={opcionesCat} className="w-[200px]" />
+            <Chips
+              valor={modo}
+              alElegir={setModo}
+              opciones={[
+                { id: 'todos', texto: 'Todos' },
+                { id: 'bajo', texto: 'Bajo el mínimo' },
+                { id: 'sin', texto: 'Sin stock' },
+              ]}
+            />
+            <div className="flex-1" />
+            <Boton tono="verde" onClick={() => setEditando(null)}>
+              Nuevo artículo
+            </Boton>
+          </div>
+        </Caja>
+
+        <Tabla
+          columnas={[
+            { clave: 'codigo', titulo: 'Código', ancho: '100px', render: (f: FilaStock) => <span className="font-medium">{f.codigo}</span> },
+            { clave: 'nombre', titulo: 'Artículo', render: (f) => f.nombre },
+            { clave: 'cat', titulo: 'Categoría', ancho: '105px', render: (f) => <span className="text-suave">{categoriaCorta(f.categoria)}</span> },
+            { clave: 'uni', titulo: 'Unidad', ancho: '75px', render: (f) => <span className="text-suave">{f.unidad}</span> },
+            { clave: 'stock', titulo: 'Stock', ancho: '80px', derecha: true, render: (f) => fmtNum(f.stock) },
+            { clave: 'min', titulo: 'Mínimo', ancho: '80px', derecha: true, render: (f) => <span className="text-suave">{fmtNum(f.stock_minimo)}</span> },
+            {
+              clave: 'estado', titulo: 'Estado', ancho: '115px',
+              render: (f) => {
+                const [txt, clase] = estadoStock(f.stock, f.stock_minimo);
+                return <Pastilla clase={clase}>{txt}</Pastilla>;
+              },
+            },
+            { clave: 'precio', titulo: 'Último precio', ancho: '120px', derecha: true, render: (f) => fmtPrecio(f.ultimo_precio) },
+            { clave: 'fecha', titulo: 'Fecha', ancho: '105px', render: (f) => <span className="text-suave">{f.ultimo_precio ? dmy(f.ultima_fecha) : '—'}</span> },
+          ]}
+          filas={filas}
+          clave={(f) => f.id}
+          cargando={cargando}
+          seleccionada={sel}
+          alSeleccionar={(f) => setSel(f.id)}
+          alDobleClic={(f) => setEditando(f.id)}
+          vacio={{ titulo: 'Todavía no hay artículos', detalle: 'Usá «Nuevo artículo» o importá una lista desde Excel.' }}
+          sinResultados={
+            texto || categoria || modo !== 'todos'
+              ? { titulo: 'Ningún artículo coincide', detalle: 'Probá con otra palabra, otra categoría u otro filtro.' }
+              : undefined
+          }
+        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[13px] text-suave">
+            {filas.length} {filas.length === 1 ? 'artículo' : 'artículos'}
+          </span>
+          <div className="flex-1" />
+          <Boton tono="claro" onClick={() => conSeleccion((id) => setEditando(id))}>Editar</Boton>
+          <Boton tono="ambar" onClick={() => conSeleccion((id) => setAjustando(id))}>Ajustar stock</Boton>
+          <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'kardex', id }))}>Ver kardex</Boton>
+          <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'precios', id }))}>Ver precios</Boton>
+          <Boton tono="claro" onClick={importar}>Importar de Excel</Boton>
+          <Boton tono="claro" onClick={async () => {
+            const r = await pedir(window.sfida.articulos.plantillaCsv());
+            if (r) avisar(`Plantilla guardada en ${r}. Llenala en Excel y usá «Importar de Excel».`, 'ok');
+          }}>Plantilla de carga</Boton>
+          <Boton tono="claro" onClick={exportar}>Exportar</Boton>
+        </div>
+        </>
+      )}
 
       <DlgArticulo
         abierto={editando !== undefined}

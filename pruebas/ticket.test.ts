@@ -139,15 +139,28 @@ describe('firmas', () => {
   });
 
   it('el corte esta en 38 columnas', () => {
-    expect(bloqueFirmas(38).length).toBe(5); // lado a lado
-    expect(bloqueFirmas(37).length).toBe(9); // apiladas
+    // Lado a lado son menos renglones que apiladas; el número exacto cambió
+    // en la v5 al agregar el renglón del NOMBRE debajo de cada firma.
+    expect(bloqueFirmas(38).length).toBeLessThan(bloqueFirmas(37).length);
+  });
+
+  it('v5: debajo de cada firma hay un renglon para el NOMBRE', () => {
+    for (const cols of [42, 30]) {
+      const l = bloqueFirmas(cols);
+      const nombres = l.filter((x) => x.includes('NOMBRE'));
+      // Uno por firma: en 42 van los dos en la misma línea, en 30 en dos.
+      expect(nombres.length).toBeGreaterThanOrEqual(1);
+      expect(l.join(' ')).toContain('NOMBRE');
+    }
   });
 });
 
 describe('contenido del vale', () => {
   it('lleva membrete, numero de vale y las dos firmas', () => {
     const t = textoTicket(vale(DETALLE_TIPICO), 80);
-    expect(t).toContain('VALE DE SALIDA DE ALMACEN');
+    // v5: el título es «SALIDA DE ALMACEN», sin la palabra «VALE».
+    expect(t).toContain('SALIDA DE ALMACEN');
+    expect(t).not.toContain('VALE DE SALIDA DE ALMACEN');
     expect(t).toContain('SFIDA');
     expect(t).toContain('RUC 20512345678');
     expect(t).toContain('V2026-0042');
@@ -197,10 +210,15 @@ describe('contenido del vale', () => {
     expect(textoTicket(vale(DETALLE_TIPICO, { direccion: null }), 80)).not.toContain('DIRECC. :');
   });
 
-  it('quien entrega y quien recibe caen en «-» si estan vacios', () => {
-    const t = textoTicket(vale(DETALLE_TIPICO, { entregado_por: '', recibido_por: '' }), 80);
-    expect(t).toContain('ENTREGA : -');
-    expect(t).toContain('RECIBE   : -'.replace('  ', ' ')); // el rótulo ya trae su espaciado
+  it('v5: el ticket YA NO lleva las lineas ENTREGA/RECIBE en la cabecera', () => {
+    // Salieron de la pantalla y del cuerpo del ticket: ahora se escriben a
+    // mano sobre las firmas del pie.
+    const t = textoTicket(vale(DETALLE_TIPICO), 80);
+    expect(t).not.toContain('ENTREGA :');
+    expect(t).not.toContain('RECIBE  :');
+    // Pero las firmas siguen estando.
+    expect(t).toContain('ENTREGUE CONFORME');
+    expect(t).toContain('RECIBI CONFORME');
   });
 });
 

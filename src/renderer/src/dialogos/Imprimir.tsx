@@ -7,7 +7,12 @@
  * ------------------------------------------------------------------------- */
 import { useEffect, useState } from 'react';
 
-import type { AnchoPapel, Impresora, VistaPreviaVale } from '../../../compartido/contrato';
+import type {
+  AnchoPapel,
+  Impresora,
+  TipoComprobante,
+  VistaPreviaVale,
+} from '../../../compartido/contrato';
 import { useApp } from '../estado/app';
 import { Boton, Chips, Dialogo, Etiqueta, Selector, SpinNumero } from '../ui/base';
 
@@ -19,11 +24,14 @@ const PAPELES: Array<{ id: AnchoPapel; texto: string }> = [
 
 export function DlgImprimir({
   abierto,
-  salidaId,
+  tipo,
+  id,
   alCerrar,
 }: {
   abierto: boolean;
-  salidaId: number | null;
+  /** Qué comprobante: el vale de salida o el ingreso. */
+  tipo: TipoComprobante;
+  id: number | null;
   alCerrar: () => void;
 }): React.JSX.Element {
   const { pedir, avisar } = useApp();
@@ -56,23 +64,28 @@ export function DlgImprimir({
   }, [abierto, pedir]);
 
   useEffect(() => {
-    if (!abierto || salidaId === null) return;
+    if (!abierto || id === null) return;
     setPrevia(null);
-    void pedir(window.sfida.impresion.vistaPrevia(salidaId, papel)).then(setPrevia);
-  }, [abierto, salidaId, papel, pedir]);
+    void pedir(window.sfida.impresion.vistaPrevia(tipo, id, papel)).then(setPrevia);
+  }, [abierto, tipo, id, papel, pedir]);
 
   async function imprimir(): Promise<void> {
-    if (salidaId === null) return;
+    if (id === null) return;
     if (!impresora) {
       avisar('Windows no reporta ninguna impresora instalada.\n\nConecte la impresora, instale su controlador y vuelva a abrir esta ventana.', 'err');
       return;
     }
     setTrabajando(true);
-    const r = await pedir(window.sfida.impresion.imprimir({ salidaId, anchoMm: papel, deviceName: impresora, copias }));
+    const r = await pedir(
+      window.sfida.impresion.imprimir({ tipo, id, anchoMm: papel, deviceName: impresora, copias }),
+    );
     setTrabajando(false);
     if (!r) return;
     if (r.ok) {
-      avisar(`Vale enviado a ${impresora} (${copias} copias).`, 'ok');
+      avisar(
+        `${tipo === 'salida' ? 'Vale' : 'Ingreso'} enviado a ${impresora} (${copias} copias).`,
+        'ok',
+      );
       alCerrar();
     } else {
       avisar(`La impresora devolvió este error:\n${r.motivo ?? 'sin detalle'}`, 'err');
@@ -80,9 +93,9 @@ export function DlgImprimir({
   }
 
   async function pdf(): Promise<void> {
-    if (salidaId === null) return;
+    if (id === null) return;
     setTrabajando(true);
-    const r = await pedir(window.sfida.impresion.guardarPdf({ salidaId, anchoMm: papel }));
+    const r = await pedir(window.sfida.impresion.guardarPdf({ tipo, id, anchoMm: papel }));
     setTrabajando(false);
     if (!r) return;
     if (r.ok) avisar(`PDF guardado en ${r.ruta}`, 'ok');
@@ -94,7 +107,7 @@ export function DlgImprimir({
   return (
     <Dialogo
       abierto={abierto}
-      titulo="Imprimir vale"
+      titulo={tipo === 'salida' ? 'Imprimir vale de salida' : 'Imprimir comprobante de ingreso'}
       alCerrar={alCerrar}
       ancho="max-w-[900px]"
       pie={

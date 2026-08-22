@@ -55,6 +55,20 @@ function abrirBase(): void {
   if (apertura.respaldo.hecho) {
     console.log('[SFIDA] respaldo previo creado:', apertura.respaldo.ruta);
   }
+  if (apertura.respaldoAuto?.hecho) {
+    console.log('[SFIDA] respaldo de esta apertura:', apertura.respaldoAuto.ruta);
+    if (apertura.respaldoAuto.borrados.length) {
+      console.log('[SFIDA] respaldos viejos borrados:', apertura.respaldoAuto.borrados.length);
+    }
+  }
+  if (apertura.migracion) {
+    const m = apertura.migracion;
+    console.log(
+      `[SFIDA] base migrada de la v${m.desde} a la v${m.hasta}: ` +
+        `${m.columnasAgregadas} columnas, ${m.articulosConvertidos} articulos a unidad chica, ` +
+        `${m.ingresosNumerados} ingresos numerados`,
+    );
+  }
 
   registrarIpc({
     db: apertura.db,
@@ -97,9 +111,24 @@ function crearVentana(): void {
   });
 
   // Cualquier enlace externo se abre en el navegador, no adentro de la app.
+  //
+  // Y SOLO si es http/https. `shell.openExternal()` le entrega la dirección al
+  // sistema operativo, que sabe abrir muchas más cosas que páginas web: con
+  // `file:` abre un archivo del disco, y hay esquemas que directamente lanzan
+  // programas. Como los datos del almacén entran por CSV, alcanzaría con que
+  // alguien pusiera una dirección rara en un nombre para tener un clic que
+  // ejecuta algo. Con la lista blanca, ese clic no hace nada.
   ventana.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // La ventana NO navega a ningún lado. Esta app es una sola pantalla: si algo
+  // la hiciera cargar otra dirección, esa página quedaría corriendo CON el
+  // preload puesto, o sea con acceso a `window.sfida` y a toda la base.
+  // Cargar el archivo propio (y recargarlo en desarrollo) sigue permitido.
+  ventana.webContents.on('will-navigate', (evento, url) => {
+    if (url !== ventana?.webContents.getURL()) evento.preventDefault();
   });
 
   void cargarPantalla(ventana);

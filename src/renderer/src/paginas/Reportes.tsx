@@ -1,15 +1,19 @@
 /* ---------------------------------------------------------------------------
- * Reportes. Port de `ReportePage` de `sfida_paginas.py`.
- * Cuatro pestañas: consumo por sucursal, kardex, ranking e historial de precios.
+ * Reportes. Port de `ReportePage` de `sfida_paginas.py`, más el panel nuevo.
+ *
+ * Cinco pestañas: el panel de valor e inversión (v5), consumo por sucursal,
+ * kardex, ranking e historial de precios.
  * ------------------------------------------------------------------------- */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type {
   ArticuloListado,
   ConsumoSucursal,
   DetalleConsumo,
   FilaHistorialPrecio,
+  InversionSucursal,
   MovimientoKardex,
+  PuntoValor,
   ResumenPrecios,
 } from '../../../compartido/contrato';
 import type { DestinoExtra } from '../App';
@@ -24,14 +28,16 @@ import {
   Tabla,
   Tarjeta,
   dmy,
+  fmtMoney,
   fmtNum,
   fmtPrecio,
   fmtVariacion,
   hoyIso,
 } from '../ui/base';
+import { GraficoBarras, GraficoLinea } from '../ui/graficos';
 import { Icono } from '../ui/iconos';
 
-type Pestana = 'consumo' | 'kardex' | 'ranking' | 'precios';
+type Pestana = 'panel' | 'consumo' | 'kardex' | 'ranking' | 'precios';
 
 function haceDias(n: number): string {
   const d = new Date(Date.now() - n * 86400000);
@@ -44,7 +50,7 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
   const [desde, setDesde] = useState(haceDias(90));
   const [hasta, setHasta] = useState(hoyIso());
   const [pestana, setPestana] = useState<Pestana>(
-    extra?.tipo === 'kardex' ? 'kardex' : extra?.tipo === 'precios' ? 'precios' : 'consumo',
+    extra?.tipo === 'kardex' ? 'kardex' : extra?.tipo === 'precios' ? 'precios' : 'panel',
   );
 
   const [articulos, setArticulos] = useState<ArticuloListado[]>([]);
@@ -58,6 +64,8 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
   const [ranking, setRanking] = useState<DetalleConsumo[]>([]);
   const [precios, setPrecios] = useState<FilaHistorialPrecio[]>([]);
   const [resumen, setResumen] = useState<ResumenPrecios | null>(null);
+  const [evolucion, setEvolucion] = useState<PuntoValor[]>([]);
+  const [inversion, setInversion] = useState<InversionSucursal[]>([]);
 
   useEffect(() => {
     void pedir(window.sfida.articulos.listar({})).then((a) => setArticulos(a ?? []));
@@ -66,6 +74,8 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
   useEffect(() => {
     void pedir(window.sfida.reportes.consumoSucursal(desde, hasta)).then((c) => setConsumo(c ?? []));
     void pedir(window.sfida.reportes.masUsados(desde, hasta, 40)).then((r) => setRanking(r ?? []));
+    void pedir(window.sfida.reportes.evolucionValor(desde, hasta, 14)).then((e) => setEvolucion(e ?? []));
+    void pedir(window.sfida.reportes.inversionSucursal(desde, hasta)).then((i) => setInversion(i ?? []));
   }, [pedir, desde, hasta, refrescos]);
 
   useEffect(() => {
@@ -97,12 +107,56 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
   const nombreArt = (id: number | null): string =>
     articulos.find((a) => a.id === id)?.codigo ?? 'articulo';
 
+  /* ------------------------------------------------------ cifras del panel */
+
+  const panel = useMemo(() => {
+    const primero = evolucion[0];
+    const ultimo = evolucion[evolucion.length - 1];
+    const valorHoy = ultimo?.valor ?? 0;
+    const arranque = primero?.valor ?? 0;
+    const dif = valorHoy - arranque;
+    // La variación en porcentaje no se muestra si se arrancó de cero: dividir
+    // por cero daría «infinito %», que no le dice nada a nadie.
+    const pct = arranque > 0.0001 ? (dif / arranque) * 100 : null;
+    const invertido = inversion.reduce((s, i) => s + i.invertido, 0);
+    const vales = inversion.reduce((s, i) => s + i.vales, 0);
+    const conMovimiento = inversion.filter((i) => i.invertido > 0 || i.unidades > 0);
+    const lider = [...inversion].sort((a, b) => b.invertido - a.invertido)[0];
+    return { valorHoy, dif, pct, invertido, vales, conMovimiento, lider, unidades: ultimo?.unidades ?? 0 };
+  }, [evolucion, inversion]);
+
+  const barras = useMemo(
+    () =>
+      [...inversion]
+        .sort((a, b) => b.invertido - a.invertido || b.unidades - a.unidades)
+        .map((i) => ({
+          id: i.codigo,
+          etiqueta: i.sucursal,
+          valor: i.invertido,
+          detalle:
+            i.vales === 0
+              ? 'sin repartos en el período'
+              : `${i.vales} ${i.vales === 1 ? 'vale' : 'vales'} · ${fmtNum(i.unidades)} unidades`,
+        })),
+    [inversion],
+  );
+
   async function exportar(): Promise<void> {
     let nombre = '';
     let cabeceras: string[] = [];
     let filas: unknown[][] = [];
 
-    if (pestana === 'consumo') {
+    if (pestana === 'panel') {
+      nombre = 'valor_del_almacen';
+      cabeceras = ['Fecha', 'Valor del almacén S/', 'Unidades en stock'];
+      filas = evolucion.map((p) => [p.fecha, p.valor.toFixed(2), fmtNum(p.unidades)]);
+      // Las dos mitades del panel van en el mismo archivo, separadas por una
+      // fila en blanco: quien lo abre quiere las dos cosas juntas.
+      filas.push([], ['Sucursal', 'Vales', 'Unidades', 'Invertido S/']);
+      for (const i of inversion) {
+        filas.push([i.sucursal, i.vales, fmtNum(i.unidades), i.invertido.toFixed(2)]);
+      }
+    } else if (pestana === 'consumo') {
       nombre = 'consumo_por_sucursal';
       cabeceras = ['Cód. sucursal', 'Sucursal', 'Vales', 'Unidades', 'Valor S/'];
       filas = consumo.map((c) => [c.codigo, c.sucursal, c.vales, fmtNum(c.unidades), c.valor.toFixed(2)]);
@@ -153,12 +207,107 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
         valor={pestana}
         alElegir={setPestana}
         opciones={[
+          { id: 'panel', texto: 'Valor e inversión' },
           { id: 'consumo', texto: 'Consumo por sucursal' },
           { id: 'kardex', texto: 'Kardex por artículo' },
           { id: 'ranking', texto: 'Artículos más usados' },
           { id: 'precios', texto: 'Historial de precios' },
         ]}
       />
+
+      {pestana === 'panel' && (
+        <>
+          <div className="flex flex-wrap gap-3">
+            <Tarjeta
+              orden={0}
+              titulo="Valor del almacén hoy"
+              valor={fmtMoney(panel.valorHoy)}
+              pie={`${fmtNum(panel.unidades)} unidades en stock`}
+              color="#2f6fed"
+              icono={<Icono nombre="caja" tam={15} />}
+            />
+            <Tarjeta
+              orden={1}
+              titulo="Variación en el período"
+              valor={`${panel.dif >= 0 ? '+' : '−'} ${fmtMoney(Math.abs(panel.dif))}`}
+              pie={panel.pct === null ? 'arrancó en cero' : `${panel.pct >= 0 ? '+' : ''}${panel.pct.toFixed(1)} % desde ${dmy(desde)}`}
+              color={panel.dif >= 0 ? '#22a06b' : '#e5484d'}
+              icono={<Icono nombre="grafico" tam={15} />}
+            />
+            <Tarjeta
+              orden={2}
+              titulo="Repartido a las tiendas"
+              valor={fmtMoney(panel.invertido)}
+              pie={`${panel.vales} ${panel.vales === 1 ? 'vale' : 'vales'} · ${panel.conMovimiento.length} de ${inversion.length} tiendas`}
+              color="#f5a623"
+              icono={<Icono nombre="salida" tam={15} />}
+            />
+          </div>
+
+          <Caja
+            titulo="Cuánto vale el almacén, día por día"
+            acciones={
+              <span className="text-[12px] text-suave">
+                Pasá el mouse por la línea para ver cada fecha
+              </span>
+            }
+          >
+            <GraficoLinea
+              puntos={evolucion.map((p) => ({
+                etiqueta: dmy(p.fecha),
+                valor: p.valor,
+                detalle: `${fmtNum(p.unidades)} unidades en stock`,
+              }))}
+              prefijo="S/ "
+              vacio="Todavía no hay compras en este período"
+            />
+            <p className="mt-2 text-[12px] text-suave">
+              Cada punto es el stock de esa fecha valorizado al precio que regía ese día, no al de
+              hoy. Por eso el gráfico no cambia hacia atrás cuando sube un precio.
+            </p>
+          </Caja>
+
+          <Caja
+            titulo="Cuánto se invirtió en cada tienda"
+            acciones={
+              <span className="text-[12px] text-suave">
+                {sucSel ? 'Tocá de nuevo para ver otra tienda' : 'Tocá una barra para ver el detalle'}
+              </span>
+            }
+          >
+            <GraficoBarras
+              barras={barras}
+              color="#22a06b"
+              seleccionada={sucSel}
+              alElegir={(id) => setSucSel(id === sucSel ? null : id)}
+              vacio="No salió nada del almacén en este período"
+            />
+            {panel.lider && panel.lider.invertido > 0 && (
+              <p className="mt-2 text-[12px] text-suave">
+                La que más recibió fue <b>{panel.lider.sucursal}</b>, con{' '}
+                {fmtMoney(panel.lider.invertido)} de {fmtMoney(panel.invertido)} repartidos.
+              </p>
+            )}
+          </Caja>
+
+          {sucSel && (
+            <Caja titulo={`Qué recibió ${inversion.find((i) => i.codigo === sucSel)?.sucursal ?? ''}`}>
+              <Tabla
+                columnas={[
+                  { clave: 'cod', titulo: 'Código', ancho: '110px', render: (d: DetalleConsumo) => d.codigo },
+                  { clave: 'art', titulo: 'Artículo', render: (d) => d.nombre },
+                  { clave: 'uni', titulo: 'Unidad', ancho: '110px', render: (d) => d.unidad },
+                  { clave: 'cant', titulo: 'Cantidad', ancho: '110px', derecha: true, render: (d) => fmtNum(d.cantidad) },
+                ]}
+                filas={detalleSuc}
+                clave={(d) => d.codigo}
+                vacio={{ titulo: 'Sin repartos en el período', detalle: 'Probá ampliando las fechas.' }}
+                alto="max-h-[280px]"
+              />
+            </Caja>
+          )}
+        </>
+      )}
 
       {pestana === 'consumo' && (
         <>

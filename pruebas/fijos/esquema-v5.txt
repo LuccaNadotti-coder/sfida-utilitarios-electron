@@ -1,0 +1,97 @@
+col|ajustes|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|ajustes|1|fecha|TEXT|nn=1|dflt=null|pk=0
+col|ajustes|2|articulo_id|INTEGER|nn=1|dflt=null|pk=0
+col|ajustes|3|cantidad|REAL|nn=1|dflt=null|pk=0
+col|ajustes|4|motivo|TEXT|nn=0|dflt=''|pk=0
+col|ajustes|5|creado_en|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+col|articulos|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|articulos|1|codigo|TEXT|nn=1|dflt=null|pk=0
+col|articulos|2|nombre|TEXT|nn=1|dflt=null|pk=0
+col|articulos|3|categoria_id|INTEGER|nn=0|dflt=null|pk=0
+col|articulos|4|unidad|TEXT|nn=1|dflt='UND'|pk=0
+col|articulos|5|stock_minimo|REAL|nn=1|dflt=0|pk=0
+col|articulos|6|activo|INTEGER|nn=1|dflt=1|pk=0
+col|articulos|7|creado_en|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+col|auditoria|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|auditoria|1|momento|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+col|auditoria|2|accion|TEXT|nn=1|dflt=null|pk=0
+col|auditoria|3|detalle|TEXT|nn=0|dflt=''|pk=0
+col|categorias|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|categorias|1|nombre|TEXT|nn=1|dflt=null|pk=0
+col|config|0|clave|TEXT|nn=0|dflt=null|pk=1
+col|config|1|valor|TEXT|nn=0|dflt=null|pk=0
+col|ingreso_det|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|ingreso_det|1|ingreso_id|INTEGER|nn=1|dflt=null|pk=0
+col|ingreso_det|2|articulo_id|INTEGER|nn=1|dflt=null|pk=0
+col|ingreso_det|3|cantidad|REAL|nn=1|dflt=null|pk=0
+col|ingreso_det|4|costo_unitario|REAL|nn=1|dflt=0|pk=0
+col|ingreso_det|5|cantidad_origen|REAL|nn=0|dflt=null|pk=0
+col|ingreso_det|6|unidad_origen|TEXT|nn=0|dflt=null|pk=0
+col|ingresos|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|ingresos|1|tipo_doc|TEXT|nn=1|dflt='BOLETA'|pk=0
+col|ingresos|2|nro_documento|TEXT|nn=1|dflt=null|pk=0
+col|ingresos|3|nro_proveedor|TEXT|nn=1|dflt=''|pk=0
+col|ingresos|4|fecha|TEXT|nn=1|dflt=null|pk=0
+col|ingresos|5|proveedor|TEXT|nn=0|dflt=''|pk=0
+col|ingresos|6|observacion|TEXT|nn=0|dflt=''|pk=0
+col|ingresos|7|creado_en|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+col|salida_det|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|salida_det|1|salida_id|INTEGER|nn=1|dflt=null|pk=0
+col|salida_det|2|articulo_id|INTEGER|nn=1|dflt=null|pk=0
+col|salida_det|3|cantidad|REAL|nn=1|dflt=null|pk=0
+col|salida_det|4|cantidad_origen|REAL|nn=0|dflt=null|pk=0
+col|salida_det|5|unidad_origen|TEXT|nn=0|dflt=null|pk=0
+col|salidas|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|salidas|1|nro_vale|TEXT|nn=1|dflt=null|pk=0
+col|salidas|2|fecha|TEXT|nn=1|dflt=null|pk=0
+col|salidas|3|sucursal_id|INTEGER|nn=1|dflt=null|pk=0
+col|salidas|4|entregado_por|TEXT|nn=0|dflt=''|pk=0
+col|salidas|5|recibido_por|TEXT|nn=0|dflt=''|pk=0
+col|salidas|6|observacion|TEXT|nn=0|dflt=''|pk=0
+col|salidas|7|creado_en|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+col|sucursales|0|id|INTEGER|nn=0|dflt=null|pk=1
+col|sucursales|1|codigo|TEXT|nn=1|dflt=null|pk=0
+col|sucursales|2|nombre|TEXT|nn=1|dflt=null|pk=0
+col|sucursales|3|direccion|TEXT|nn=0|dflt=''|pk=0
+col|sucursales|4|responsable|TEXT|nn=0|dflt=''|pk=0
+col|sucursales|5|activo|INTEGER|nn=1|dflt=1|pk=0
+col|sucursales|6|creado_en|TEXT|nn=1|dflt=datetime('now','localtime')|pk=0
+fk|ajustes|0|articulos|articulo_id|id|NO ACTION
+fk|articulos|0|categorias|categoria_id|id|NO ACTION
+fk|ingreso_det|0|articulos|articulo_id|id|NO ACTION
+fk|ingreso_det|1|ingresos|ingreso_id|id|CASCADE
+fk|salida_det|0|articulos|articulo_id|id|NO ACTION
+fk|salida_det|1|salidas|salida_id|id|CASCADE
+fk|salidas|0|sucursales|sucursal_id|id|NO ACTION
+idx|ajustes|ix_aju_fecha|unique=0|origin=c
+idx|articulos|sqlite_autoindex_articulos_1|unique=1|origin=u
+idx|categorias|sqlite_autoindex_categorias_1|unique=1|origin=u
+idx|config|sqlite_autoindex_config_1|unique=1|origin=pk
+idx|ingreso_det|ix_ing_det_art|unique=0|origin=c
+idx|ingresos|ix_ing_fecha|unique=0|origin=c
+idx|ingresos|ix_ing_prov|unique=0|origin=c
+idx|ingresos|ux_ing_nrodoc|unique=1|origin=c
+idx|salida_det|ix_sal_det_art|unique=0|origin=c
+idx|salidas|ix_sal_fecha|unique=0|origin=c
+idx|salidas|ix_sal_suc|unique=0|origin=c
+idx|salidas|sqlite_autoindex_salidas_1|unique=1|origin=u
+idx|sucursales|sqlite_autoindex_sucursales_1|unique=1|origin=u
+index|ix_aju_fecha|ajustes|CREATE INDEX ix_aju_fecha ON ajustes(fecha)
+index|ix_ing_det_art|ingreso_det|CREATE INDEX ix_ing_det_art ON ingreso_det(articulo_id)
+index|ix_ing_fecha|ingresos|CREATE INDEX ix_ing_fecha ON ingresos(fecha)
+index|ix_ing_prov|ingresos|CREATE INDEX ix_ing_prov ON ingresos(proveedor, nro_proveedor)
+index|ix_sal_det_art|salida_det|CREATE INDEX ix_sal_det_art ON salida_det(articulo_id)
+index|ix_sal_fecha|salidas|CREATE INDEX ix_sal_fecha ON salidas(fecha)
+index|ix_sal_suc|salidas|CREATE INDEX ix_sal_suc ON salidas(sucursal_id)
+index|ux_ing_nrodoc|ingresos|CREATE UNIQUE INDEX ux_ing_nrodoc ON ingresos(nro_documento)
+table|ajustes|ajustes|CREATE TABLE ajustes ( id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT NOT NULL, articulo_id INTEGER NOT NULL REFERENCES articulos(id), cantidad REAL NOT NULL, motivo TEXT DEFAULT '', creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')) )
+table|articulos|articulos|CREATE TABLE articulos ( id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT NOT NULL UNIQUE, nombre TEXT NOT NULL, categoria_id INTEGER REFERENCES categorias(id), unidad TEXT NOT NULL DEFAULT 'UND', stock_minimo REAL NOT NULL DEFAULT 0, activo INTEGER NOT NULL DEFAULT 1, creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')) )
+table|auditoria|auditoria|CREATE TABLE auditoria ( id INTEGER PRIMARY KEY AUTOINCREMENT, momento TEXT NOT NULL DEFAULT (datetime('now','localtime')), accion TEXT NOT NULL, detalle TEXT DEFAULT '' )
+table|categorias|categorias|CREATE TABLE categorias ( id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL UNIQUE )
+table|config|config|CREATE TABLE config ( clave TEXT PRIMARY KEY, valor TEXT )
+table|ingreso_det|ingreso_det|CREATE TABLE ingreso_det ( id INTEGER PRIMARY KEY AUTOINCREMENT, ingreso_id INTEGER NOT NULL REFERENCES ingresos(id) ON DELETE CASCADE, articulo_id INTEGER NOT NULL REFERENCES articulos(id), cantidad REAL NOT NULL CHECK (cantidad > 0), costo_unitario REAL NOT NULL DEFAULT 0, cantidad_origen REAL, unidad_origen TEXT )
+table|ingresos|ingresos|CREATE TABLE ingresos ( id INTEGER PRIMARY KEY AUTOINCREMENT, tipo_doc TEXT NOT NULL DEFAULT 'BOLETA', nro_documento TEXT NOT NULL, nro_proveedor TEXT NOT NULL DEFAULT '', fecha TEXT NOT NULL, proveedor TEXT DEFAULT '', observacion TEXT DEFAULT '', creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')) )
+table|salida_det|salida_det|CREATE TABLE salida_det ( id INTEGER PRIMARY KEY AUTOINCREMENT, salida_id INTEGER NOT NULL REFERENCES salidas(id) ON DELETE CASCADE, articulo_id INTEGER NOT NULL REFERENCES articulos(id), cantidad REAL NOT NULL CHECK (cantidad > 0), cantidad_origen REAL, unidad_origen TEXT )
+table|salidas|salidas|CREATE TABLE salidas ( id INTEGER PRIMARY KEY AUTOINCREMENT, nro_vale TEXT NOT NULL UNIQUE, fecha TEXT NOT NULL, sucursal_id INTEGER NOT NULL REFERENCES sucursales(id), entregado_por TEXT DEFAULT '', recibido_por TEXT DEFAULT '', observacion TEXT DEFAULT '', creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')) )
+table|sqlite_sequence|sqlite_sequence|CREATE TABLE sqlite_sequence(name,seq)
+table|sucursales|sucursales|CREATE TABLE sucursales ( id INTEGER PRIMARY KEY AUTOINCREMENT, codigo TEXT NOT NULL UNIQUE, nombre TEXT NOT NULL, direccion TEXT DEFAULT '', responsable TEXT DEFAULT '', activo INTEGER NOT NULL DEFAULT 1, creado_en TEXT NOT NULL DEFAULT (datetime('now','localtime')) )

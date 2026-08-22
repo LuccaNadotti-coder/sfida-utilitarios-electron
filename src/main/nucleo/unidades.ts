@@ -141,3 +141,78 @@ export function fmtCantidad(cantidad: unknown, codigo: unknown, conEquivalencia 
   const [valor] = convertirABase(cantidad, u.codigo);
   return `${txt} (${fmtNum(valor)} ${base})`;
 }
+
+/* =========================================================================
+ * FRACCIONAMIENTO (v5)
+ *
+ * El artículo se define en su UNIDAD DE STOCK, que es la más chica de su
+ * familia (LEJÍA en L, no en GAL). Al comprar o repartir se elige cualquier
+ * unidad de la MISMA familia y el sistema convierte antes de guardar.
+ *
+ *   Compro 1 GAL de un artículo cuyo stock está en L  ->  entran 3.785 L
+ *   Reparto 500 ML                                    ->  salen 0.5 L
+ *
+ * Así se puede comprar por galón y repartir por medio litro sin que el stock
+ * pierda precisión.
+ * ========================================================================= */
+
+/** La unidad base de la familia a la que pertenece este código. */
+export function unidadBaseDe(codigo: unknown): string {
+  return BASE_FAMILIA[infoUnidad(codigo).familia];
+}
+
+/**
+ * Las unidades entre las que se puede convertir, dada la unidad de stock.
+ * Son las de la misma familia, ordenadas de la más chica a la más grande.
+ */
+export function unidadesCompatibles(codigoStock: unknown): InfoUnidad[] {
+  const familia = infoUnidad(codigoStock).familia;
+  return UNIDADES.filter(([, , f]) => f === familia)
+    .map(([codigo]) => infoUnidad(codigo))
+    .sort((a, b) => a.factor - b.factor);
+}
+
+/**
+ * Convierte una cantidad digitada a la unidad de stock del artículo.
+ *
+ * Devuelve `null` si las unidades son de familias distintas — eso es un error
+ * de programación, no algo que la persona pueda provocar desde la pantalla:
+ * el combo solo ofrece unidades compatibles.
+ */
+export function aUnidadStock(
+  cantidad: number,
+  unidadOrigen: unknown,
+  unidadStock: unknown,
+): number | null {
+  const origen = infoUnidad(unidadOrigen);
+  const destino = infoUnidad(unidadStock);
+  if (origen.familia !== destino.familia) return null;
+  // Se pasa por la base para no encadenar divisiones: 1 GAL -> 3.785 L -> L
+  return (Number(cantidad) * origen.factor) / destino.factor;
+}
+
+/** La inversa: cuántas unidades `destino` son N unidades de stock. */
+export function desdeUnidadStock(
+  cantidad: number,
+  unidadStock: unknown,
+  unidadDestino: unknown,
+): number | null {
+  return aUnidadStock(cantidad, unidadStock, unidadDestino);
+}
+
+/**
+ * «1 GAL = 3.785 L» pero contra la unidad de stock, no contra la base.
+ * Vacío si son la misma unidad.
+ */
+export function equivalenciaContra(codigo: unknown, unidadStock: unknown): string {
+  const u = infoUnidad(codigo);
+  const s = infoUnidad(unidadStock);
+  if (u.codigo === s.codigo) return '';
+  const factor = aUnidadStock(1, u.codigo, s.codigo);
+  if (factor === null) return '';
+  const txt =
+    Math.abs(factor - Math.round(factor)) < 0.0005
+      ? String(Math.round(factor))
+      : String(Number(factor.toFixed(4)));
+  return `1 ${u.codigo} = ${txt} ${s.codigo}`;
+}

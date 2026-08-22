@@ -44,6 +44,7 @@ const api: ApiSfida = {
     reactivar: i(CANALES.artReactivar),
     codigoSugerido: i(CANALES.artCodigoSugerido),
     ajustar: i(CANALES.artAjustar),
+    unidadesDe: i(CANALES.artUnidadesDe),
     ultimoPrecio: i(CANALES.artUltimoPrecio),
     importarCsv: i(CANALES.artImportar),
     plantillaCsv: i(CANALES.artPlantilla),
@@ -57,6 +58,7 @@ const api: ApiSfida = {
     listar: i(CANALES.ingListar),
     detalle: i(CANALES.ingDetalle),
     cabecera: i(CANALES.ingCabecera),
+    siguienteNro: i(CANALES.ingSiguienteNro),
     registrar: i(CANALES.ingRegistrar),
     anular: i(CANALES.ingAnular),
     corregirPrecio: i(CANALES.ingCorregirPrecio),
@@ -85,6 +87,9 @@ const api: ApiSfida = {
     historialPrecios: i(CANALES.repHistPrecios),
     resumenPrecios: i(CANALES.repResumenPrecios),
     exportar: i(CANALES.repExportar),
+    evolucionValor: i(CANALES.repEvolucionValor),
+    inversionSucursal: i(CANALES.repInversionSucursal),
+    sugerenciaCompra: i(CANALES.repSugerenciaCompra),
   },
   maestro: {
     auditoria: i(CANALES.maeAuditoria),
@@ -95,6 +100,7 @@ const api: ApiSfida = {
     respaldar: i(CANALES.maeRespaldar),
     restaurar: i(CANALES.maeRestaurar),
     borrarMovimientos: i(CANALES.maeBorrarMov),
+    conteoFisico: i(CANALES.maeConteoFisico),
   },
   impresion: {
     impresoras: i(CANALES.impImpresoras),

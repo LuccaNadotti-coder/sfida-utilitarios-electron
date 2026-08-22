@@ -208,6 +208,48 @@ error, muestra un `dialog.showErrorBox` si hay interfaz, y llama a
 `app.exit(1)`. Es el equivalente del `_morir_sin_qt()` de la versión Python:
 nunca dejar a la persona del almacén frente a una ventana que no abre.
 
+### 24. `CREATE TABLE IF NOT EXISTS` no actualiza una tabla que ya existe, y el índice se cae encima
+
+La v5 agrega la columna `ingresos.nro_proveedor` y un índice que la usa
+(`ix_ing_prov`). Los dos estaban en la misma constante `ESQUEMA`, y `conectar()`
+la ejecutaba **antes** de migrar.
+
+Sobre una base nueva funciona perfecto. Sobre una base v4 —la que tiene todos
+los datos del almacén— la tabla `ingresos` ya existe, así que
+`CREATE TABLE IF NOT EXISTS` **no hace nada**: no agrega la columna nueva. Dos
+líneas más abajo, el `CREATE INDEX` sobre esa columna revienta con
+`no such column: nro_proveedor`, y como eso pasa antes de que la migración
+llegue a correr, **la base vieja no se puede abrir nunca**: cada intento falla
+en el mismo punto.
+
+**Cómo se detectó.** Escribiendo `pruebas/migracion.test.ts`, que arma a mano
+una base con el esquema exacto de la v4 y la abre. Ocho pruebas fallaron todas
+con el mismo error. Ninguna prueba anterior lo habría encontrado: todas parten
+de una base nueva, donde el orden da igual. **El único camino que importaba —el
+de las PC del almacén que ya tienen datos— era justamente el que no se
+probaba.**
+
+**Por qué importa.** Era el bug más caro posible del port: la app nueva
+instalada sobre la base real, y no abre. Y el mensaje habla de una columna, no
+de una migración, así que manda a buscar el problema al lugar equivocado.
+
+**Qué se hizo.** El esquema se partió en `ESQUEMA_TABLAS` y `ESQUEMA_INDICES`, y
+`conectar()` intercala los pasos en un orden que ahora está escrito con sus
+motivos: tablas → respaldo → normalizar unidades → migrar → índices → semillas.
+
+De paso aparecieron dos problemas del mismo origen:
+
+- **`UNIQUE (nro_documento)` dentro de la tabla no se puede agregar con
+  `ALTER TABLE`.** Una base v4 se quedaría con el UNIQUE viejo
+  `(tipo_doc, nro_documento)` y aceptaría dos ingresos con el mismo número
+  interno. Se movió la regla a un índice único (`ux_ing_nrodoc`), que la
+  migración sí puede crear: así la base nueva y la migrada terminan iguales.
+- **`migrarUnidades()` tenía que correr antes de la conversión a unidad
+  chica**, no después. Busca el factor por el código de unidad; con el texto
+  viejo (`GALON` en vez de `GAL`) no lo encuentra, cae en UND con factor 1 y
+  **no convierte nada, sin avisar**. El stock quedaría en galones con la
+  etiqueta de litros.
+
 ---
 
 ## Cómo agregar una trampa acá

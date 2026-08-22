@@ -93,18 +93,19 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
   return (
     <div className="flex flex-col gap-4 p-5">
       <div className="flex flex-wrap gap-3">
-        <Tarjeta titulo="Artículos" valor={resumen?.articulos ?? '—'} pie="activos en el almacén" color={AZUL} icono={<Icono nombre="caja" tam={15} />} />
-        <Tarjeta titulo="Sucursales" valor={resumen?.sucursales ?? '—'} pie="locales atendidos" color="#5a8df3" icono={<Icono nombre="tienda" tam={15} />} />
-        <Tarjeta titulo="Ingresos" valor={resumen?.ingresos ?? '—'} pie="boletas registradas" color={VERDE} icono={<Icono nombre="entrada" tam={15} />} />
-        <Tarjeta titulo="Salidas" valor={resumen?.salidas ?? '—'} pie="vales de reparto" color={AZUL} icono={<Icono nombre="salida" tam={15} />} />
+        <Tarjeta orden={0} titulo="Artículos" valor={resumen?.articulos ?? '—'} pie="activos en el almacén" color={AZUL} icono={<Icono nombre="caja" tam={15} />} />
+        <Tarjeta orden={1} titulo="Sucursales" valor={resumen?.sucursales ?? '—'} pie="locales atendidos" color="#5a8df3" icono={<Icono nombre="tienda" tam={15} />} />
+        <Tarjeta orden={2} titulo="Ingresos" valor={resumen?.ingresos ?? '—'} pie="boletas registradas" color={VERDE} icono={<Icono nombre="entrada" tam={15} />} />
+        <Tarjeta orden={3} titulo="Salidas" valor={resumen?.salidas ?? '—'} pie="vales de reparto" color={AZUL} icono={<Icono nombre="salida" tam={15} />} />
         <Tarjeta
+          orden={4}
           titulo="Alertas"
           valor={resumen?.alertas ?? '—'}
           pie={alertas.length ? 'artículos por comprar' : 'todo abastecido'}
           color={ROJO}
           icono={<Icono nombre="alerta" tam={15} />}
         />
-        <Tarjeta titulo="Valorizado" valor={resumen ? fmtMoney(resumen.valorizado) : '—'} pie="según el último precio" color="#a76c05" icono={<Icono nombre="etiqueta" tam={15} />} />
+        <Tarjeta orden={5} titulo="Valorizado" valor={resumen ? fmtMoney(resumen.valorizado) : '—'} pie="según el último precio" color="#a76c05" icono={<Icono nombre="etiqueta" tam={15} />} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-9">

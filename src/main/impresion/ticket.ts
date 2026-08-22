@@ -98,18 +98,33 @@ export function campo(rotulo: string, valor: unknown, cols: number): string[] {
   return cortar(valor, ancho).map((l, i) => rstrip(ljust(i === 0 ? rotulo : '', SANGRIA_CAMPO) + l));
 }
 
-/** Las dos firmas. En papel angosto (< 38 columnas) van una debajo de la otra. */
+/**
+ * Las dos firmas. En papel angosto (< 38 columnas) van una debajo de la otra.
+ *
+ * Debajo de cada rótulo va un SEGUNDO renglón, en blanco, para escribir el
+ * nombre a mano. Los nombres no se digitan en el sistema: se llenan en el
+ * papel, que es donde se firma.
+ *
+ *      ________________        ________________
+ *      ENTREGUE CONFORME       RECIBI CONFORME
+ *      ________________        ________________
+ *      NOMBRE                  NOMBRE
+ */
 export function bloqueFirmas(cols: number): string[] {
   const raya = '_'.repeat(Math.max(10, cols - 10));
   if (cols >= 38) {
     const media = Math.floor(cols / 2);
     const anchoRaya = Math.max(8, media - 4);
+    const rayaDoble = center('_'.repeat(anchoRaya), media) + center('_'.repeat(anchoRaya), media);
     return [
       '',
       '',
       '',
-      center('_'.repeat(anchoRaya), media) + center('_'.repeat(anchoRaya), media),
+      rayaDoble,
       center('ENTREGUE CONFORME', media) + center('RECIBI CONFORME', media),
+      '',
+      rayaDoble,
+      rstrip(center('NOMBRE', media) + center('NOMBRE', media)),
     ];
   }
   return [
@@ -119,9 +134,15 @@ export function bloqueFirmas(cols: number): string[] {
     rstrip(center(raya, cols)),
     rstrip(center('ENTREGUE CONFORME', cols)),
     '',
+    rstrip(center(raya, cols)),
+    rstrip(center('NOMBRE', cols)),
+    '',
     '',
     rstrip(center(raya, cols)),
     rstrip(center('RECIBI CONFORME', cols)),
+    '',
+    rstrip(center(raya, cols)),
+    rstrip(center('NOMBRE', cols)),
   ];
 }
 
@@ -141,48 +162,83 @@ function dmy(iso: unknown): string {
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : String(iso);
 }
 
-/** Texto plano del ticket (80 o 58 mm). */
-export function textoTicket(v: DatosVale, anchoMm: number): string {
-  const cols = COLUMNAS[anchoMm] ?? 42;
-  const linea = '-'.repeat(cols);
-  const doble = '='.repeat(cols);
-  const anNom = Math.max(8, cols - SANGRIA_ITEM);
+/** Una línea del detalle puede venir de un ingreso o de una salida. */
+export interface LineaImprimible {
+  codigo: string;
+  nombre: string;
+  /** Cantidad en la UNIDAD DE STOCK del artículo. */
+  cantidad: number;
+  /** Unidad de stock del artículo. */
+  unidad: string;
+  /** Lo que se digitó de verdad, si fue en otra unidad. */
+  cantidad_origen?: number | null;
+  unidad_origen?: string | null;
+}
 
+/**
+ * Arma las líneas del detalle.
+ *
+ * Se imprime lo que la persona DIGITÓ («1 GAL»), no la conversión interna,
+ * porque es lo que se entrega físicamente en el mostrador. Debajo, sangrado,
+ * va el código y —cuando la unidad digitada no es la de stock— el equivalente
+ * («= 3.785 L»), que es lo que descontó el sistema.
+ */
+function lineasDetalle(det: LineaImprimible[], cols: number): string[] {
+  const anNom = Math.max(8, cols - SANGRIA_ITEM);
   const cuerpo: string[] = [];
-  let totalItems = 0;
-  let totalUnd = 0;
-  for (const d of v.det) {
-    const u = infoUnidad(d.unidad);
-    const cant = fmtNum(d.cantidad);
-    totalItems += 1;
-    totalUnd += Number(d.cantidad);
+
+  for (const d of det) {
+    const uStock = infoUnidad(d.unidad);
+    const hayOrigen =
+      d.unidad_origen != null &&
+      d.cantidad_origen != null &&
+      infoUnidad(d.unidad_origen).codigo !== uStock.codigo;
+
+    const uMostrar = hayOrigen ? infoUnidad(d.unidad_origen) : uStock;
+    const cantMostrar = hayOrigen ? Number(d.cantidad_origen) : Number(d.cantidad);
+    const cant = fmtNum(cantMostrar);
+
     const partes = cortar(d.nombre, anNom);
     cuerpo.push(
       rjust(cant.slice(0, ANCHO_CANT), ANCHO_CANT) +
         ' ' +
-        ljust(u.codigo.slice(0, ANCHO_UND), ANCHO_UND) +
+        ljust(uMostrar.codigo.slice(0, ANCHO_UND), ANCHO_UND) +
         ' ' +
         partes[0],
     );
     for (const extra of partes.slice(1)) cuerpo.push(' '.repeat(SANGRIA_ITEM) + extra);
 
     let pie = d.codigo;
-    if (equivalenciaUnidad(u.codigo)) {
-      const [valor, base] = convertirABase(d.cantidad, u.codigo);
+    if (hayOrigen) {
+      // Lo que realmente entró o salió del stock.
+      pie += `  =  ${fmtNum(d.cantidad)} ${uStock.codigo}`;
+    } else if (equivalenciaUnidad(uStock.codigo)) {
+      const [valor, base] = convertirABase(d.cantidad, uStock.codigo);
       pie += `  =  ${fmtNum(valor)} ${base}`;
     }
     for (const l of cortar(pie, anNom)) cuerpo.push(' '.repeat(SANGRIA_ITEM) + l);
   }
+  return cuerpo;
+}
 
-  const cabecera = ['VALE DE SALIDA DE ALMACEN', linea];
+/** Texto plano del ticket de SALIDA (80 o 58 mm). */
+export function textoTicket(v: DatosVale, anchoMm: number): string {
+  const cols = COLUMNAS[anchoMm] ?? 42;
+  const linea = '-'.repeat(cols);
+  const doble = '='.repeat(cols);
+
+  const cuerpo = lineasDetalle(v.det, cols);
+  const totalItems = v.det.length;
+  const totalUnd = v.det.reduce((s, d) => s + Number(d.cantidad), 0);
+
+  // v5: el título es «SALIDA DE ALMACEN» (antes «VALE DE SALIDA DE ALMACEN»),
+  // y ya NO salen las líneas ENTREGA/RECIBE en la cabecera: esos datos se
+  // escriben a mano sobre las firmas del pie.
+  const cabecera = ['SALIDA DE ALMACEN', linea];
   cabecera.push(...campo('N° VALE :', v.cab.nro_vale, cols));
   cabecera.push(...campo('FECHA   :', dmy(v.cab.fecha), cols));
   cabecera.push(...campo('DESTINO :', `${v.cab.suc_codigo} - ${v.cab.sucursal}`, cols));
   if (v.cab.direccion) cabecera.push(...campo('DIRECC. :', v.cab.direccion, cols));
-  cabecera.push(...campo('ENTREGA :', v.cab.entregado_por || '-', cols));
-  cabecera.push(...campo('RECIBE  :', v.cab.recibido_por || '-', cols));
-  // La observación ahora SÍ se imprime: la pantalla ya la llena.
-  // Ver CAMBIOS_DELIBERADOS.md punto 2.
   if (v.cab.observacion) cabecera.push(...campo('OBSERV. :', v.cab.observacion, cols));
 
   const encabezadoTabla = [
@@ -283,6 +339,164 @@ export function htmlA4(v: DatosVale): string {
     '<table width="100%" style="font-size:9pt"><tr>' +
     '<td align="center">__________________________<br>Entregu&eacute; conforme</td>' +
     '<td align="center">__________________________<br>Recib&iacute; conforme</td>' +
+    '</tr></table>' +
+    '<p style="font-size:7.5pt;color:#888;text-align:center">' +
+    `SFIDA &middot; Control de &Uacute;tiles de Oficina y Limpieza &middot; Impreso el ${esc(v.impresoEl)}</p>`
+  );
+}
+
+/* =========================================================================
+ * TICKET DE INGRESO (v5)
+ *
+ * Lo pidió el almacén: cuando llega mercadería, que salga un comprobante
+ * impreso igual que el de salida. Lleva el N° interno del sistema y también
+ * el N° de la boleta del proveedor, que es el que figura en el papel que trae
+ * el transportista.
+ *
+ * Las firmas son las mismas dos, pero acá significan:
+ *   ENTREGUE CONFORME -> el transportista que trajo la mercadería
+ *   RECIBI CONFORME   -> el encargado del almacén que la recibió
+ * Los nombres se escriben a mano en el renglón de abajo.
+ * ========================================================================= */
+
+export interface DatosTicketIngreso {
+  nroDocumento: string;
+  nroProveedor: string;
+  tipoDoc: string;
+  fecha: string;
+  proveedor: string;
+  observacion: string;
+  det: LineaImprimible[];
+  /** Total de la boleta, en soles. 0 si ninguna línea tiene precio. */
+  total: number;
+  empresa: string;
+  empresaDir: string;
+  empresaRuc: string;
+  impresoEl: string;
+}
+
+/** Texto plano del ticket de INGRESO (80 o 58 mm). */
+export function textoTicketIngreso(v: DatosTicketIngreso, anchoMm: number): string {
+  const cols = COLUMNAS[anchoMm] ?? 42;
+  const linea = '-'.repeat(cols);
+  const doble = '='.repeat(cols);
+
+  const cuerpo = lineasDetalle(v.det, cols);
+  const totalItems = v.det.length;
+  const totalUnd = v.det.reduce((s, d) => s + Number(d.cantidad), 0);
+
+  const cabecera = ['INGRESOS ALMACEN UTILITARIOS', linea];
+  cabecera.push(...campo('N° ING.  :', v.nroDocumento, cols));
+  cabecera.push(...campo('FECHA    :', dmy(v.fecha), cols));
+  if (v.proveedor) cabecera.push(...campo('PROVEEDOR:', v.proveedor, cols));
+  if (v.nroProveedor) {
+    cabecera.push(...campo('DOCUMENTO:', `${v.tipoDoc} ${v.nroProveedor}`, cols));
+  }
+  if (v.observacion) cabecera.push(...campo('OBSERV.  :', v.observacion, cols));
+
+  const encabezadoTabla = [
+    rjust('CANT', ANCHO_CANT) + ' ' + ljust('UND', ANCHO_UND) + ' ' + 'ARTICULO',
+  ];
+
+  const pie = [
+    linea,
+    ljust('TOTAL DE ARTICULOS:', cols - 8) + rjust(String(totalItems), 8),
+    ljust('TOTAL DE UNIDADES:', cols - 8) + rjust(fmtNum(totalUnd), 8),
+  ];
+  // El precio es opcional: si ninguna línea lo tenía, no se imprime un total
+  // en cero, que se leería como «salió gratis».
+  if (v.total > 0) {
+    pie.push(ljust('TOTAL S/:', cols - 10) + rjust(v.total.toFixed(2), 10));
+  }
+  pie.push(doble);
+
+  let membrete = centrado((v.empresa || 'SFIDA').toUpperCase(), cols);
+  if (v.empresaDir) membrete = membrete.concat(centrado(v.empresaDir.toUpperCase(), cols));
+  if (v.empresaRuc) membrete = membrete.concat(centrado(`RUC ${v.empresaRuc}`, cols));
+
+  const lineas = ([] as string[]).concat(
+    membrete,
+    [linea],
+    cabecera,
+    [linea],
+    encabezadoTabla,
+    [linea],
+    cuerpo,
+    pie,
+    bloqueFirmas(cols),
+    [''],
+    centrado(`Impreso el ${v.impresoEl}`, cols),
+    centrado('SFIDA - Control de Utiles', cols),
+    ['', '', ''],
+  );
+
+  return limitar(lineas, cols).join('\n');
+}
+
+/** Versión A4 del ingreso, con tabla de verdad, para archivar. */
+export function htmlA4Ingreso(v: DatosTicketIngreso): string {
+  let totalUnd = 0;
+  const filas = v.det
+    .map((d) => {
+      const uStock = infoUnidad(d.unidad);
+      const hayOrigen =
+        d.unidad_origen != null &&
+        d.cantidad_origen != null &&
+        infoUnidad(d.unidad_origen).codigo !== uStock.codigo;
+      totalUnd += Number(d.cantidad);
+      const uMostrar = hayOrigen ? infoUnidad(d.unidad_origen) : uStock;
+      const cantMostrar = hayOrigen ? Number(d.cantidad_origen) : Number(d.cantidad);
+      const eq = hayOrigen
+        ? ` <span style='color:#666'>(${fmtNum(d.cantidad)} ${uStock.codigo})</span>`
+        : '';
+      return (
+        '<tr>' +
+        `<td style='padding:6px;border-bottom:1px solid #ddd'>${esc(d.codigo)}</td>` +
+        `<td style='padding:6px;border-bottom:1px solid #ddd'>${esc(d.nombre)}</td>` +
+        `<td align='right' style='padding:6px;border-bottom:1px solid #ddd'>${fmtNum(cantMostrar)}</td>` +
+        `<td style='padding:6px;border-bottom:1px solid #ddd'>${uMostrar.codigo}${eq}</td>` +
+        '</tr>'
+      );
+    })
+    .join('');
+
+  const obs = v.observacion
+    ? `<p style="font-size:10pt"><b>Observación:</b> ${esc(v.observacion)}</p>`
+    : '';
+  const total = v.total > 0 ? ` &nbsp;&nbsp; <b>Total:</b> S/ ${v.total.toFixed(2)}` : '';
+
+  return (
+    '<table width="100%"><tr>' +
+    `<td><div style="font-size:20pt;font-weight:bold">${esc(v.empresa)}</div>` +
+    `<div style="font-size:8pt;color:#555">${esc(v.empresaDir)}` +
+    (v.empresaRuc ? `  &middot;  RUC ${esc(v.empresaRuc)}` : '') +
+    '</div></td>' +
+    '<td align="right"><div style="font-size:13pt;font-weight:bold">INGRESOS ALMACÉN UTILITARIOS</div>' +
+    `<div style="font-size:14pt;font-weight:bold">N&deg; ${esc(v.nroDocumento)}</div>` +
+    `<div style="font-size:9pt;color:#555">${dmy(v.fecha)}</div></td>` +
+    '</tr></table>' +
+    '<hr style="border:0;border-top:2px solid #111">' +
+    '<table width="100%" style="font-size:10pt" cellpadding="4">' +
+    `<tr><td width="50%"><b>Proveedor:</b> ${esc(v.proveedor || '-')}</td>` +
+    `<td><b>Documento:</b> ${esc(v.tipoDoc)} ${esc(v.nroProveedor || 's/n')}</td></tr>` +
+    '</table><br>' +
+    '<table width="100%" cellspacing="0" style="font-size:10pt">' +
+    '<tr style="background:#1c2536;color:#ffffff">' +
+    '<th align="left" style="padding:7px" width="16%">C&oacute;digo</th>' +
+    '<th align="left" style="padding:7px">Art&iacute;culo</th>' +
+    '<th align="right" style="padding:7px" width="12%">Cantidad</th>' +
+    '<th align="left" style="padding:7px" width="22%">Unidad</th></tr>' +
+    filas +
+    '</table>' +
+    `<p style="font-size:10pt"><b>Total de art&iacute;culos:</b> ${v.det.length}` +
+    ` &nbsp;&nbsp; <b>Total de unidades:</b> ${fmtNum(totalUnd)}${total}</p>` +
+    obs +
+    '<br><br><br>' +
+    '<table width="100%" style="font-size:9pt"><tr>' +
+    '<td align="center">__________________________<br>Entregu&eacute; conforme' +
+    '<br><br>__________________________<br>Nombre</td>' +
+    '<td align="center">__________________________<br>Recib&iacute; conforme' +
+    '<br><br>__________________________<br>Nombre</td>' +
     '</tr></table>' +
     '<p style="font-size:7.5pt;color:#888;text-align:center">' +
     `SFIDA &middot; Control de &Uacute;tiles de Oficina y Limpieza &middot; Impreso el ${esc(v.impresoEl)}</p>`

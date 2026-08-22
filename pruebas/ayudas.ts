@@ -7,6 +7,13 @@ import { join } from 'node:path';
 
 import type { Database } from 'better-sqlite3';
 
+import {
+  registrarIngreso,
+  registrarSalida,
+  type DatosIngreso,
+  type DatosSalida,
+} from '../src/main/nucleo/movimientos';
+
 /**
  * Carpeta temporal propia de cada prueba, que se borra sola.
  *
@@ -27,6 +34,57 @@ export function carpetaTemporal(): { ruta: string; borrar: () => void } {
       }
     },
   };
+}
+
+/* ---------------------------------------------------------------- atajos --
+ *
+ * La mayoría de las pruebas solo necesitan «meter stock» o «sacar stock» sin
+ * que importen el proveedor ni la observación. Estos atajos evitan repetir el
+ * objeto entero en cada llamada y dejan a la vista lo que sí importa.
+ * ------------------------------------------------------------------------- */
+
+/** Ingreso rápido: líneas `[articuloId, cantidad, costo?, unidad?]`. */
+export function ingresarStock(
+  db: Database,
+  lineas: Array<[number, number, number?, string?]>,
+  extra: Partial<Omit<DatosIngreso, 'items'>> = {},
+): number {
+  return registrarIngreso(db, {
+    tipoDoc: 'BOLETA',
+    nroProveedor: '',
+    fecha: hoyIso(),
+    proveedor: '',
+    observacion: '',
+    ...extra,
+    items: lineas.map(([articuloId, cantidad, costo, unidad]) => ({
+      articuloId,
+      cantidad,
+      costo: costo ?? 0,
+      unidad,
+    })),
+  });
+}
+
+/** Salida rápida: líneas `[articuloId, cantidad, unidad?]`. */
+export function sacarStock(
+  db: Database,
+  sucursalId: number,
+  lineas: Array<[number, number, string?]>,
+  extra: Partial<Omit<DatosSalida, 'items' | 'sucursalId'>> = {},
+): number {
+  return registrarSalida(db, {
+    fecha: hoyIso(),
+    observacion: '',
+    ...extra,
+    sucursalId,
+    items: lineas.map(([articuloId, cantidad, unidad]) => ({ articuloId, cantidad, unidad })),
+  });
+}
+
+function hoyIso(): string {
+  const d = new Date();
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
 /**

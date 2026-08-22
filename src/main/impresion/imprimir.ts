@@ -19,8 +19,20 @@ import { BrowserWindow } from 'electron';
 
 import type { AnchoPapel, VistaPreviaVale } from '../../compartido/contrato';
 import { documentoVale, type ModoMargen } from './documento';
-import type { DatosVale } from './ticket';
-import { htmlA4, textoTicket } from './ticket';
+import type { DatosTicketIngreso, DatosVale } from './ticket';
+import { htmlA4, htmlA4Ingreso, textoTicket, textoTicketIngreso } from './ticket';
+
+/** Un comprobante listo para imprimir: salida o ingreso. */
+export type Comprobante =
+  | { tipo: 'salida'; datos: DatosVale }
+  | { tipo: 'ingreso'; datos: DatosTicketIngreso };
+
+function textoDe(c: Comprobante, anchoMm: number): string {
+  return c.tipo === 'salida' ? textoTicket(c.datos, anchoMm) : textoTicketIngreso(c.datos, anchoMm);
+}
+function htmlDe(c: Comprobante): string {
+  return c.tipo === 'salida' ? htmlA4(c.datos) : htmlA4Ingreso(c.datos);
+}
 
 const MICRAS_POR_MM = 1000;
 const PULGADAS_POR_MM = 1 / 25.4;
@@ -60,15 +72,15 @@ interface ValeAbierto {
 
 /** Arma el documento y lo abre en una ventana oculta, ya medido. */
 async function abrirVale(
-  datos: DatosVale,
+  c: Comprobante,
   anchoMm: AnchoPapel,
   modoMargen: ModoMargen = 'driver',
 ): Promise<ValeAbierto> {
   const esA4 = anchoMm >= 200;
   const html = documentoVale({
     anchoMm,
-    texto: esA4 ? null : textoTicket(datos, anchoMm),
-    htmlA4: esA4 ? htmlA4(datos) : null,
+    texto: esA4 ? null : textoDe(c, anchoMm),
+    htmlA4: esA4 ? htmlDe(c) : null,
     modoMargen,
   });
 
@@ -127,8 +139,8 @@ function pageSizeParaPdf(anchoMm: number, altoHojaMm: number): 'A4' | { width: n
 }
 
 /** Devuelve el vale renderizado, para la vista previa de la pantalla. */
-export async function vistaPrevia(datos: DatosVale, anchoMm: AnchoPapel): Promise<VistaPreviaVale> {
-  const v = await abrirVale(datos, anchoMm);
+export async function vistaPrevia(c: Comprobante, anchoMm: AnchoPapel): Promise<VistaPreviaVale> {
+  const v = await abrirVale(c, anchoMm);
   try {
     return {
       html: v.medidas.html,
@@ -147,13 +159,13 @@ export async function vistaPrevia(datos: DatosVale, anchoMm: AnchoPapel): Promis
 
 /** Manda el vale a la impresora. */
 export async function imprimirVale(
-  datos: DatosVale,
+  c: Comprobante,
   anchoMm: AnchoPapel,
   deviceName: string,
   copias: number,
   modoMargen: ModoMargen = 'driver',
 ): Promise<{ ok: boolean; motivo?: string }> {
-  const v = await abrirVale(datos, anchoMm, modoMargen);
+  const v = await abrirVale(c, anchoMm, modoMargen);
   try {
     const config: Electron.WebContentsPrintOptions = {
       silent: true,
@@ -180,11 +192,11 @@ export async function imprimirVale(
  * el ticket que sale de la impresora de verdad.
  */
 export async function capturarVale(
-  datos: DatosVale,
+  c: Comprobante,
   anchoMm: AnchoPapel,
   ruta: string,
 ): Promise<boolean> {
-  const v = await abrirVale(datos, anchoMm);
+  const v = await abrirVale(c, anchoMm);
   try {
     for (let intento = 1; intento <= 2; intento++) {
       try {
@@ -205,12 +217,12 @@ export async function capturarVale(
 
 /** Guarda el vale como PDF. */
 export async function pdfVale(
-  datos: DatosVale,
+  c: Comprobante,
   anchoMm: AnchoPapel,
   ruta: string,
   modoMargen: ModoMargen = 'driver',
 ): Promise<{ ok: boolean; motivo?: string; medidas: Medidas }> {
-  const v = await abrirVale(datos, anchoMm, modoMargen);
+  const v = await abrirVale(c, anchoMm, modoMargen);
   try {
     const config: Electron.PrintToPDFOptions = {
       printBackground: true,

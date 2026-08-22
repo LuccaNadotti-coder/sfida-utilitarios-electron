@@ -1,12 +1,21 @@
 # Cambios deliberados respecto de la versión Python
 
-El port es **fiel**: la app nueva tiene que hacer exactamente lo mismo que la
-vieja. Las únicas excepciones son las de esta lista, todas aprobadas
-explícitamente. Cualquier otra diferencia que aparezca es un error del port,
-no una decisión.
+Este archivo tiene **dos partes**, y la diferencia importa:
+
+- **La v4 fue un port fiel.** La app nueva tenía que hacer exactamente lo mismo
+  que la vieja, y las tres únicas excepciones son los puntos 1 a 3. Cualquier
+  otra diferencia que apareciera era un error del port, no una decisión.
+- **La v5 ya no es un port.** Es una versión con funciones nuevas, pedidas
+  explícitamente. Rompe la compatibilidad con la app de Python **a propósito**
+  y hay una migración que se encarga de las bases viejas. Son los puntos 4 en
+  adelante.
 
 Lo que parezca mejorable y **no** esté acá va a la sección 8 de
-`MIGRACION_INVENTARIO.md`, para discutirlo después del port.
+`MIGRACION_INVENTARIO.md`, para discutirlo aparte.
+
+---
+
+# Parte 1 · La v4 (port fiel)
 
 ---
 
@@ -14,7 +23,7 @@ Lo que parezca mejorable y **no** esté acá va a la sección 8 de
 
 | | |
 |---|---|
-| **Estado** | Pendiente — se implementa en la fase 2 |
+| **Estado** | Hecho |
 | **Aprobado** | Sí |
 | **Dónde estaba** | `siguiente_nro_vale()` en `sfida_core.py` |
 | **Sección 8** | punto 1 |
@@ -28,6 +37,9 @@ números no se reusan, igual que en un talonario físico.
 
 **Qué NO cambia.** El número sigue siendo **editable**: se puede escribir el de
 una boleta física, y el aviso de «ese número ya existe» se mantiene.
+
+> **Actualización de la v5:** esto último dejó de ser cierto. El número del
+> vale **ya no es editable**. Ver el punto 6.
 
 **Límite conocido, encontrado al escribir la prueba.** MAX se calcula sobre los
 vales que **existen**. Si se anula el vale **más alto**, ese número vuelve a
@@ -57,7 +69,7 @@ adaptarla, y conviene agregar una que cubra justamente el caso que se arregla
 
 | | |
 |---|---|
-| **Estado** | Pendiente — pantalla en la fase 3 |
+| **Estado** | Hecho |
 | **Aprobado** | Sí |
 | **Dónde estaba** | `SalidaPage.guardar()` en `sfida_paginas.py` |
 | **Sección 8** | punto 6 |
@@ -86,6 +98,159 @@ campo no es excusa para cambiar esa regla de paso.
 Se mantiene el comportamiento actual. Se anota acá porque se preguntó
 explícitamente y para que nadie lo «arregle» más adelante pensando que es un
 descuido.
+
+---
+
+---
+
+# Parte 2 · La v5 (funciones nuevas)
+
+**Desde acá se rompe la compatibilidad con la app de Python, a propósito.** Una
+base v5 **no** la puede abrir la app vieja: tiene columnas que no entiende. La
+migración de v4 a v5 corre sola al abrir y hace dos respaldos antes de tocar
+nada (`src/main/db/migraciones.ts`).
+
+---
+
+## 4. Fraccionamiento: se compra por galón y se reparte por litro
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí — es el pedido que abrió la v5 |
+
+**El problema real.** «Ingreso 1 galón, pero ese galón al final lo reparto en
+litros a las tiendas, o en 500 ml. ¿Cómo haríamos ahí?»
+
+**La decisión.** La unidad del artículo pasa a ser **la más chica** de su
+familia (la LEJÍA se lleva en litros, no en galones). En cada movimiento se
+elige en qué unidad se está digitando y el sistema convierte.
+
+**Lo que se convierte son DOS cosas, no una:**
+
+1. **La cantidad**: 1 GAL entra como 3.785 L.
+2. **El precio**: S/ 22 el galón se guarda como S/ 5.81 el litro.
+
+Convertir solo la cantidad es el error silencioso que hay que evitar: el
+inventario quedaría valorizado **3.785 veces de más** y nada avisaría.
+
+**Lo que se digitó se guarda igual**, en `cantidad_origen` y `unidad_origen`,
+para poder imprimirlo y auditarlo. Si están en NULL, la línea se cargó
+directamente en la unidad de stock.
+
+**No se puede mezclar familias**: pedir kilos de un artículo que se mide en
+litros da un error claro, no una conversión inventada.
+
+Lo cubren 17 pruebas en `pruebas/fraccionamiento.test.ts` y 11 en
+`pruebas/migracion.test.ts`.
+
+---
+
+## 5. El N° del ingreso lo genera el sistema, y el del proveedor va aparte
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí |
+
+**Antes.** `ingresos.nro_documento` era el número de la boleta del proveedor, y
+se escribía a mano.
+
+**Ahora.** Son **dos campos distintos**, porque son dos cosas distintas:
+
+| Campo | Qué es | Quién lo pone |
+|---|---|---|
+| `nro_documento` | el N° interno del almacén (`I2026-0001`) | el sistema, correlativo, no editable |
+| `nro_proveedor` | el N° que figura en el papel del proveedor | la persona, tal cual lo ve |
+
+**La regla de «no registrar dos veces la misma boleta» se mudó** de
+`(tipo_doc, nro_documento)` a `(proveedor, nro_proveedor)`, que es lo que
+realmente identifica una compra. Un número de proveedor vacío se deja pasar:
+hay compras sin comprobante.
+
+**Detalle técnico que importa:** el «no se repite el N° interno» se aplica con
+un **índice único** (`ux_ing_nrodoc`) y no con un `UNIQUE` adentro de la tabla.
+Una base v4 ya trae su propio UNIQUE y eso no se puede cambiar con
+`ALTER TABLE`; con el índice, la base nueva y la migrada terminan con la misma
+regla. Ver la trampa 24 en `TRAMPAS.md`.
+
+---
+
+## 6. El N° del vale de salida ya no es editable
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí |
+
+Contradice lo que decía el punto 1 («el número sigue siendo editable»). Fue un
+pedido posterior y explícito: el número lo pone el sistema y no se toca.
+
+El límite conocido del punto 1 (anular el vale más alto libera su número)
+**sigue vigente**: MAX se calcula sobre los vales que existen.
+
+---
+
+## 7. Los tickets impresos cambian de forma
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí |
+
+| Qué | Antes | Ahora |
+|---|---|---|
+| Título del ticket de salida | `VALE DE SALIDA DE ALMACEN` | `SALIDA DE ALMACEN` |
+| Líneas `ENTREGA :` / `RECIBE  :` en la cabecera | sí | **no** |
+| Firmas `ENTREGUE CONFORME` / `RECIBI CONFORME` | sí | sí, se conservan |
+| Renglón `NOMBRE` debajo de cada firma | no | **sí**, en los dos tickets |
+| Ticket de ingreso | no existía | **sí**: `INGRESOS ALMACEN UTILITARIOS` |
+
+Los nombres de quién entrega y quién recibe **se escriben a mano sobre el
+papel**. La pantalla de salidas ya no los pide, y lo dice ahí mismo.
+
+La columna «Recibió» del historial se conserva porque los vales **viejos** sí
+tienen ese dato; para los nuevos muestra «—».
+
+---
+
+## 8. Las tres supermejoras aprobadas
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí — elegidas entre varias propuestas |
+
+1. **Sugerencia de compra** (`Artículos y stock → Qué comprar`). Mira lo que
+   salió en los últimos N meses, saca el promedio diario y calcula cuánto falta
+   para cubrir X días. Nunca sugiere menos que el stock mínimo. **No compra ni
+   registra nada**: solo arma la lista.
+2. **Conteo físico guiado** (`Artículos y stock → Conteo físico`). Se carga lo
+   contado de varios artículos y se aplica **todo junto**, en una transacción.
+   Un campo vacío significa «no lo conté», **no** «hay cero» — confundir esas
+   dos cosas vaciaría el almacén.
+3. **Respaldo automático.** En cada apertura se guarda una copia en
+   `respaldos/` y se conservan **las 10 más recientes**. Es red contra el error
+   humano, no contra un disco roto: para eso sigue haciendo falta la copia
+   externa. Ver `SEGURIDAD.md`.
+
+---
+
+## 9. Dos correcciones de seguridad
+
+| | |
+|---|---|
+| **Estado** | Hecho |
+| **Aprobado** | Sí — salieron de la revisión pedida |
+
+- `shell.openExternal()` ahora solo abre `http://` y `https://`. Antes aceptaba
+  cualquier esquema, incluidos los que le piden algo al sistema operativo.
+- El CSV exportado neutraliza lo que Excel tomaría por fórmula. Los nombres
+  entran por CSV y vuelven a salir en los reportes, así que el circuito
+  existía de verdad.
+
+El detalle completo, con lo que se revisó y lo que queda abierto, está en
+`SEGURIDAD.md`.
 
 ---
 
