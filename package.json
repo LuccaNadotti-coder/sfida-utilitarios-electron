@@ -1,0 +1,90 @@
+{
+  "name": "sfida-utilitarios-electron",
+  "productName": "SFIDA Útiles",
+  "version": "4.0.0",
+  "description": "Control de útiles de oficina y limpieza — versión Electron",
+  "main": "./out/main/index.js",
+  "private": true,
+  "type": "module",
+  "author": "SFIDA",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "npm run typecheck && electron-vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verificar:nativos": "node scripts/verificar-nativos.mjs",
+    "postinstall": "node scripts/verificar-nativos.mjs",
+    "capturas": "electron-vite build && node scripts/capturas.mjs",
+    "demo": "node scripts/sembrar-demo.mjs",
+    "verificar:impresion": "electron-vite build && node scripts/verificar-impresion.mjs",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "43.2.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "framer-motion": "13.1.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.11"
+  },
+  "build": {
+    "appId": "com.sfida.utiles",
+    "productName": "SFIDA Utiles v4",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "perMachine": false,
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SFIDA Utiles v4",
+      "artifactName": "SFIDA_Setup.exe",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "SFIDA_Portable_${version}.exe"
+    }
+  }
+}

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+<title>Vale</title>
+<!--
+  Este documento es EL QUE SE IMPRIME. Se carga en una ventana oculta aparte,
+  nunca en la ventana de la interfaz: si se imprimiera el renderer principal
+  saldrian los botones y el selector de impresora en el papel.
+
+  Parametros por query string:
+    mm     = 80 | 58 | 210     ancho del papel
+    margen = driver | css      quien aplica el margen de 3 mm (ver README)
+    regla  = 1 | 0             agrega una regla de N columnas para medir a ojo
+-->
+<style id="estiloPagina"></style>
+<style>
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  #hoja {
+    color: #000000;
+    font-weight: 600;
+    white-space: pre;
+    /* La familia se fija abajo por JS para poder medirla con la misma que se
+       usa al imprimir. */
+  }
+  /* La regla se mide, no se lee: sirve para comprobar en el papel real que N
+     caracteres entran exactos en el ancho util. */
+  #regla { position: absolute; visibility: hidden; white-space: pre; top: -9999px; left: 0; }
+  @media print { #reglaVisible { color: #000; } }
+</style>
+</head>
+<body>
+<pre id="hoja"></pre>
+<span id="regla"></span>
+
+<script src="./ticket.js"></script>
+<script src="./vale-ejemplo.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  const T = window.SfidaTicket;
+  const q = new URLSearchParams(location.search);
+  const anchoMm = Number(q.get('mm') || 80);
+  const modoMargen = q.get('margen') === 'css' ? 'css' : 'driver';
+  const conRegla = q.get('regla') === '1';
+
+  const cols = T.COLUMNAS[anchoMm] || 42;
+  const margenMm = T.margen(anchoMm);
+  const utilMm = anchoMm - margenMm * 2;
+
+  // Letra de maquina de escribir: todas miden lo mismo, asi las columnas del
+  // vale quedan alineadas igual que en la boleta fisica.
+  const FUENTE = "Consolas, 'Courier New', 'DejaVu Sans Mono', 'Liberation Mono', monospace";
+
+  const MM_A_PX = 96 / 25.4;   // CSS: 1mm siempre son 96/25.4 px, tambien al imprimir
+
+  // ------------------------------------------------------- caja de la pagina
+  // Dos formas de aplicar el margen de 3 mm, para poder probar cual le gusta
+  // al driver termico:
+  //   driver -> la pagina no tiene margen y el margen lo pone el padding.
+  //             Se combina con margins:{marginType:'none'} en webContents.print,
+  //             que es lo que evita que el driver agregue margenes propios.
+  //   css    -> el margen lo pone @page y el body no tiene padding.
+  const estilo = document.getElementById('estiloPagina');
+  if (modoMargen === 'css') {
+    estilo.textContent =
+      '@page { size: ' + anchoMm + 'mm auto; margin: ' + margenMm + 'mm; }';
+    document.body.style.padding = '0';
+  } else {
+    estilo.textContent =
+      '@page { size: ' + anchoMm + 'mm auto; margin: 0; }';
+    document.body.style.padding = margenMm + 'mm';
+  }
+  document.body.style.width = utilMm + 'mm';
+
+  // ------------------------------------------------------------- el texto
+  let texto;
+  if (anchoMm >= 200) {
+    texto = null;   // A4 se arma aparte, mas abajo
+  } else {
+    const vale = Object.assign({}, window.VALE_EJEMPLO, {
+      impreso_el: q.get('ahora') || '',
+    });
+    texto = T.textoTicket(vale, anchoMm);
+    if (conRegla) {
+      const regla = ('' + '0123456789').repeat(Math.ceil(cols / 10)).slice(0, cols);
+      texto = regla + '\n' + '<'.padEnd(cols - 1, '-') + '>' + '\n' + texto;
+    }
+  }
+
+  const hoja = document.getElementById('hoja');
+  hoja.style.fontFamily = FUENTE;
+  hoja.style.lineHeight = '116%';
+  hoja.style.margin = '0';
+
+  // ------------------------------------------------- tamano de letra medido
+  // No se puede dejar fijo: 42 caracteres a 10 pt no entran en 74 mm y el
+  // ticket sale cortado por los costados. Cada PC tiene fuentes distintas, asi
+  // que se MIDE el ancho real de una linea de N caracteres y se baja la letra
+  // hasta que entre. Es el mismo problema que en Qt, pero aca la medicion es
+  // exacta y no hace falta iterar 40 veces.
+  function tamLetraQueEntra(columnas, anchoUtilMm) {
+    const objetivoPx = anchoUtilMm * MM_A_PX;
+    const regla = document.getElementById('regla');
+    regla.style.fontFamily = FUENTE;
+    regla.style.fontWeight = '600';
+    regla.textContent = 'M'.repeat(columnas);
+
+    function anchoCon(pt) {
+      regla.style.fontSize = pt + 'pt';
+      return regla.getBoundingClientRect().width;
+    }
+
+    // Estimacion inicial: 1 pt = 25.4/72 mm y un monoespaciado avanza ~0.60 em
+    let tam = Math.min(13, Math.max(4, (anchoUtilMm / (25.4 / 72)) / (columnas * 0.60)));
+    // Una pasada proporcional para acercarse de una
+    const usado = anchoCon(tam);
+    if (usado > 0) tam = Math.min(13, Math.max(4, tam * (objetivoPx / usado)));
+    // Garantia final: nunca pasarse del ancho util. Se compara contra el ancho
+    // REAL medido, no contra un objetivo teorico.
+    for (let i = 0; i < 200 && anchoCon(tam) > objetivoPx && tam > 3; i++) {
+      tam = Math.round((tam - 0.02) * 100) / 100;
+    }
+    return tam;
+  }
+
+  const tam = tamLetraQueEntra(cols, utilMm);
+
+  if (texto !== null) {
+    hoja.style.fontSize = tam + 'pt';
+    hoja.textContent = texto;
+  } else {
+    // ------------------------------------------------------------- A4
+    hoja.style.whiteSpace = 'normal';
+    hoja.style.fontFamily = 'Arial, Helvetica, sans-serif';
+    hoja.style.fontWeight = '400';
+    hoja.style.fontSize = '10pt';
+    hoja.innerHTML = htmlA4(window.VALE_EJEMPLO, q.get('ahora') || '');
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function htmlA4(vale, ahora) {
+    let totalUnd = 0;
+    const filas = vale.items.map((d) => {
+      const u = T.infoUnidad(d.unidad);
+      totalUnd += Number(d.cantidad);
+      let eq = '';
+      if (T.equivalenciaUnidad(u.codigo)) {
+        const [valor, base] = T.convertirABase(d.cantidad, u.codigo);
+        eq = " <span style='color:#666'>(" + T.fmtNum(valor) + ' ' + base + ')</span>';
+      }
+      return '<tr>'
+        + "<td style='padding:6px;border-bottom:1px solid #ddd'>" + esc(d.codigo) + '</td>'
+        + "<td style='padding:6px;border-bottom:1px solid #ddd'>" + esc(d.nombre) + '</td>'
+        + "<td align='right' style='padding:6px;border-bottom:1px solid #ddd'>" + T.fmtNum(d.cantidad) + '</td>'
+        + "<td style='padding:6px;border-bottom:1px solid #ddd'>" + u.codigo + eq + '</td>'
+        + '</tr>';
+    }).join('');
+
+    return ''
+      + '<table width="100%"><tr>'
+      + '<td><div style="font-size:20pt;font-weight:bold">' + esc(vale.empresa) + '</div>'
+      + '<div style="font-size:8pt;color:#555">' + esc(vale.empresa_dir)
+      + (vale.empresa_ruc ? '  &middot;  RUC ' + esc(vale.empresa_ruc) : '') + '</div></td>'
+      + '<td align="right"><div style="font-size:13pt;font-weight:bold">VALE DE SALIDA</div>'
+      + '<div style="font-size:14pt;font-weight:bold">N&deg; ' + esc(vale.nro_vale) + '</div>'
+      + '<div style="font-size:9pt;color:#555">' + T.dmy(vale.fecha) + '</div></td>'
+      + '</tr></table>'
+      + '<hr style="border:0;border-top:2px solid #111">'
+      + '<table width="100%" style="font-size:10pt" cellpadding="4">'
+      + '<tr><td width="50%"><b>Sucursal destino:</b> ' + esc(vale.suc_codigo) + ' - ' + esc(vale.sucursal) + '</td>'
+      + '<td><b>Direcci&oacute;n:</b> ' + esc(vale.direccion || '-') + '</td></tr>'
+      + '<tr><td><b>Entregado por:</b> ' + esc(vale.entregado_por || '-') + '</td>'
+      + '<td><b>Recibido por:</b> ' + esc(vale.recibido_por || '-') + '</td></tr>'
+      + '</table><br>'
+      + '<table width="100%" cellspacing="0" style="font-size:10pt">'
+      + '<tr style="background:#1c2536;color:#ffffff">'
+      + '<th align="left" style="padding:7px" width="16%">C&oacute;digo</th>'
+      + '<th align="left" style="padding:7px">Art&iacute;culo</th>'
+      + '<th align="right" style="padding:7px" width="12%">Cantidad</th>'
+      + '<th align="left" style="padding:7px" width="22%">Unidad</th></tr>'
+      + filas + '</table>'
+      + '<p style="font-size:10pt"><b>Total de art&iacute;culos:</b> ' + vale.items.length
+      + ' &nbsp;&nbsp; <b>Total de unidades:</b> ' + T.fmtNum(totalUnd) + '</p>'
+      + '<br><br><br>'
+      + '<table width="100%" style="font-size:9pt"><tr>'
+      + '<td align="center">__________________________<br>Entregu&eacute; conforme</td>'
+      + '<td align="center">__________________________<br>Recib&iacute; conforme</td>'
+      + '</tr></table>'
+      + '<p style="font-size:7.5pt;color:#888;text-align:center">'
+      + 'SFIDA &middot; Control de &Uacute;tiles de Oficina y Limpieza &middot; Impreso el ' + esc(ahora) + '</p>';
+  }
+
+  // ------------------------------------------------ datos para el principal
+  // El rollo es continuo: la hoja tiene que medir justo lo que ocupa el vale,
+  // si no la impresora bota papel de mas (o corta el ticket por la mitad).
+  window.__medidas = function () {
+    // OJO: NO usar document.documentElement.scrollHeight. Devuelve el maximo
+    // entre el contenido y el viewport, y como la ventana oculta mide 1200 px
+    // de alto, todos los vales daban el mismo alto (el del viewport) sin
+    // importar cuantas lineas tuvieran. En el rollo continuo eso significa
+    // botar papel de mas en cada ticket. Se mide el elemento de verdad.
+    const contenido = document.getElementById('hoja');
+    const rellenoPx = (modoMargen === 'driver' ? margenMm : 0) * MM_A_PX;
+    const altoContenidoPx = contenido.getBoundingClientRect().height + rellenoPx * 2;
+    const altoContenidoMm = altoContenidoPx / MM_A_PX;
+    // En modo «css» el margen lo pone @page y NO esta dentro del scrollHeight,
+    // asi que hay que sumarlo para saber cuanto mide la hoja fisica.
+    const altoHojaMm = altoContenidoMm + (modoMargen === 'css' ? margenMm * 2 : 0);
+    return {
+      anchoMm, margenMm, utilMm, cols, modoMargen,
+      tamLetraPt: tam,
+      altoContenidoMm: Math.round(altoContenidoMm * 100) / 100,
+      altoHojaMm: Math.round(altoHojaMm * 100) / 100,
+      lineas: texto === null ? null : texto.split('\n').length,
+      lineaMasLarga: texto === null ? null
+        : Math.max.apply(null, texto.split('\n').map((l) => l.length)),
+    };
+  };
+})();
+</script>
+</body>
+</html>

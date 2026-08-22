@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<!-- Sin CSP, Electron avisa por consola en desarrollo. En la app de verdad
+     (fase 1) los scripts van en archivos aparte y se puede sacar el
+     'unsafe-inline', que aca hace falta solo porque el prototipo es un HTML
+     suelto con el script adentro. -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+<title>SFIDA · Prototipo de impresión</title>
+<style>
+  /* Paleta tomada de sfida_estilo.py del proyecto Python */
+  :root {
+    --lateral:#1c2536; --lateral-txt:#9fb0c9;
+    --coral:#e5484d; --azul:#2f6fed; --azul-osc:#2559c9; --azul-clr:#5a8df3;
+    --verde:#22a06b; --ambar:#f5a623; --ambar-osc:#a76c05;
+    --gris-fondo:#f6f8fb; --gris-cab:#f1f4f9; --blanco:#fff;
+    --borde:#e6eaf0; --separador:#eef1f6; --texto:#1f2733; --suave:#7b8794;
+  }
+  * { box-sizing:border-box; font-family:'Segoe UI Variable Display','Segoe UI',Inter,Arial,sans-serif; }
+  html,body { margin:0; height:100%; background:var(--gris-fondo); color:var(--texto); font-size:14px; }
+
+  .app { display:flex; flex-direction:column; height:100%; }
+  header {
+    background:var(--blanco); border-bottom:1px solid var(--borde);
+    padding:14px 22px; display:flex; align-items:center; gap:14px;
+  }
+  header h1 { font-size:19px; font-weight:600; letter-spacing:-.3px; margin:0; }
+  header .sub { font-size:12.5px; color:var(--suave); }
+  .pill {
+    margin-left:auto; background:#fdf3e1; color:var(--ambar-osc);
+    padding:6px 12px; border-radius:999px; font-size:12px; font-weight:600;
+  }
+
+  main { flex:1; display:grid; grid-template-columns: 400px 1fr; gap:16px; padding:16px 22px; overflow:hidden; }
+  .col { display:flex; flex-direction:column; gap:14px; min-height:0; overflow:auto; }
+
+  .caja { background:var(--blanco); border:1px solid var(--borde); border-radius:12px; padding:14px 16px; }
+  .caja h2 { font-size:14px; font-weight:600; margin:0 0 10px; }
+  label.rot { display:block; font-size:12px; font-weight:500; color:var(--suave); margin:10px 0 5px; }
+  label.rot:first-of-type { margin-top:0; }
+
+  select, input[type=number] {
+    width:100%; background:var(--blanco); border:1px solid #d9dfe8; border-radius:8px;
+    padding:9px 11px; font-size:14px; color:var(--texto);
+  }
+  select:focus, input:focus { outline:none; border:2px solid var(--azul); padding:8px 10px; }
+
+  .radios { display:flex; gap:8px; }
+  .radios button {
+    flex:1; background:var(--separador); color:#4a5563; border:0; border-radius:7px;
+    padding:9px 8px; font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .radios button[aria-pressed="true"] { background:var(--blanco); color:var(--azul); box-shadow:inset 0 0 0 1.5px var(--azul); }
+
+  .check { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; }
+
+  .btn {
+    border:0; border-radius:8px; padding:11px 16px; font-weight:600; font-size:13px;
+    cursor:pointer; color:#fff; background:var(--azul);
+  }
+  .btn:hover { background:var(--azul-clr); }
+  .btn.verde { background:var(--verde); }
+  .btn.verde:hover { background:#2bbb7e; }
+  .btn.gris { background:var(--separador); color:#3a4553; }
+  .btn.gris:hover { background:#e3e8f0; }
+  .btn.claro { background:var(--blanco); color:var(--azul); border:1px solid #d9dfe8; }
+  .btn:disabled { background:#cfd7e3; color:#fff; cursor:not-allowed; }
+  .fila-btn { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+  .fila-btn .btn { flex:1 1 auto; }
+
+  .nota { font-size:12px; color:var(--suave); line-height:1.5; margin:10px 0 0; }
+
+  /* ------- vista previa ------- */
+  .previa { display:flex; flex-direction:column; min-height:0; }
+  .previa .lienzo {
+    flex:1; overflow:auto; background:#e9edf3; border:1px solid var(--borde);
+    border-radius:12px; padding:24px; display:flex; justify-content:center; align-items:flex-start;
+  }
+  .papel {
+    background:#fff; box-shadow:0 6px 24px rgba(0,0,0,.14);
+    transform-origin: top center;
+  }
+  .medidas {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(118px,1fr)); gap:8px; margin-top:12px;
+  }
+  .medidas div { background:var(--gris-cab); border-radius:8px; padding:8px 10px; }
+  .medidas b { display:block; font-size:16px; font-weight:700; }
+  .medidas span { font-size:11px; color:var(--suave); }
+
+  pre.log {
+    background:#1c2536; color:#c9d6e8; border-radius:10px; padding:12px 14px;
+    font-family:Consolas,'Courier New',monospace; font-size:11.5px; line-height:1.5;
+    max-height:190px; overflow:auto; margin:0; white-space:pre-wrap;
+  }
+  .aviso { border-radius:8px; padding:10px 13px; font-weight:600; font-size:13px; margin-top:10px; }
+  .aviso.ok  { background:#e5f6ee; color:#14724a; }
+  .aviso.err { background:#fdecec; color:#b3282c; }
+  .aviso.info{ background:#fdf3e1; color:var(--ambar-osc); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <h1>SFIDA · Prototipo de impresión</h1>
+      <div class="sub">Fase 0 — probar la GOOJPRT antes de reescribir nada. Sin base de datos.</div>
+    </div>
+    <div class="pill">Vale de ejemplo · no toca datos reales</div>
+  </header>
+
+  <main>
+    <!-- ------------------------------------------------ controles -->
+    <div class="col">
+      <div class="caja">
+        <h2>Impresora</h2>
+        <select id="impresora"></select>
+        <div class="fila-btn">
+          <button class="btn claro" id="btnRecargar">Actualizar lista</button>
+        </div>
+        <p class="nota" id="notaImpresora"></p>
+      </div>
+
+      <div class="caja">
+        <h2>Papel</h2>
+        <label class="rot">Tamaño</label>
+        <div class="radios" id="papeles">
+          <button data-mm="80"  aria-pressed="true">80 mm</button>
+          <button data-mm="58"  aria-pressed="false">58 mm</button>
+          <button data-mm="210" aria-pressed="false">A4</button>
+        </div>
+
+        <label class="rot">Quién aplica el margen de 3 mm</label>
+        <div class="radios" id="margenes">
+          <button data-modo="driver" aria-pressed="true">Sin margen del driver</button>
+          <button data-modo="css"    aria-pressed="false">Margen por @page</button>
+        </div>
+        <p class="nota">
+          <b>Sin margen del driver:</b> <code>@page { margin: 0 }</code> +
+          <code>margins:{marginType:'none'}</code> y el 3 mm lo pone el relleno del
+          documento. Es lo que suele necesitar el driver térmico para no agregar
+          márgenes propios.<br>
+          <b>Margen por @page:</b> <code>@page { margin: 3mm }</code> y Electron no
+          toca los márgenes. <b>Probá las dos y quedate con la que salga derecha.</b>
+        </p>
+
+        <label class="rot">Copias</label>
+        <input type="number" id="copias" min="1" max="9" value="2">
+
+        <div class="check">
+          <input type="checkbox" id="regla">
+          <label for="regla">Imprimir una regla de columnas arriba del vale</label>
+        </div>
+        <p class="nota">
+          La regla son los números 0-9 repetidos hasta completar las columnas del
+          papel (42 en 80 mm, 30 en 58 mm) y una flecha <code>&lt;---&gt;</code> del
+          mismo ancho. Si en el papel entra justa y no se corta, el ancho está bien.
+        </p>
+      </div>
+
+      <div class="caja">
+        <h2>Probar</h2>
+        <div class="fila-btn">
+          <button class="btn verde" id="btnImprimir">Imprimir ahora (silencioso)</button>
+        </div>
+        <div class="fila-btn">
+          <button class="btn gris" id="btnDialogo">Con el diálogo de Windows</button>
+          <button class="btn gris" id="btnPdf">Guardar PDF</button>
+        </div>
+        <div id="aviso"></div>
+      </div>
+    </div>
+
+    <!-- ------------------------------------------------ vista previa -->
+    <div class="col previa">
+      <div class="caja" style="display:flex;flex-direction:column;min-height:0;flex:1">
+        <h2>Así va a salir impreso <span style="font-weight:400;color:var(--suave);font-size:12px" id="zoomTxt"></span></h2>
+        <div class="lienzo"><div class="papel" id="papel"></div></div>
+        <div class="medidas" id="medidas"></div>
+      </div>
+      <div class="caja">
+        <h2>Qué se le mandó a la impresora</h2>
+        <pre class="log" id="log">Todavía no se imprimió nada.</pre>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+
+const estado = { anchoMm: 80, modoMargen: 'driver', regla: false };
+
+// ------------------------------------------------------------- impresoras
+async function cargarImpresoras() {
+  const sel = $('impresora');
+  const previa = sel.value;
+  sel.innerHTML = '';
+  let lista = [];
+  try { lista = await window.sfida.impresoras(); }
+  catch (e) { avisar('No se pudo consultar la lista de impresoras: ' + e.message, 'err'); }
+
+  if (!lista.length) {
+    const o = document.createElement('option');
+    o.textContent = 'Windows no reporta ninguna impresora instalada';
+    o.value = '';
+    sel.appendChild(o);
+    sel.disabled = true;
+    $('notaImpresora').textContent =
+      'Conecte la impresora, instale su controlador y pulse «Actualizar lista».';
+    return;
+  }
+  sel.disabled = false;
+  for (const i of lista) {
+    const o = document.createElement('option');
+    o.value = i.name;
+    o.textContent = i.displayName + (i.isDefault ? '   (predeterminada)' : '');
+    sel.appendChild(o);
+  }
+  if (previa && lista.some((i) => i.name === previa)) sel.value = previa;
+  $('notaImpresora').textContent =
+    lista.length + ' impresora(s). El nombre técnico que se le pasa a Electron es: ' + sel.value;
+}
+
+$('impresora').addEventListener('change', () => {
+  $('notaImpresora').textContent =
+    'El nombre técnico que se le pasa a Electron es: ' + $('impresora').value;
+});
+$('btnRecargar').addEventListener('click', cargarImpresoras);
+
+// ---------------------------------------------------------------- selectores
+function grupo(idGrupo, atributo, alCambiar) {
+  const cont = $(idGrupo);
+  cont.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button');
+    if (!b) return;
+    for (const otro of cont.querySelectorAll('button')) {
+      otro.setAttribute('aria-pressed', String(otro === b));
+    }
+    alCambiar(b.dataset[atributo]);
+  });
+}
+grupo('papeles', 'mm', (v) => { estado.anchoMm = Number(v); refrescar(); });
+grupo('margenes', 'modo', (v) => { estado.modoMargen = v; refrescar(); });
+$('regla').addEventListener('change', (e) => { estado.regla = e.target.checked; refrescar(); });
+
+// -------------------------------------------------------------- vista previa
+async function refrescar() {
+  let r;
+  try { r = await window.sfida.previsualizar(estado); }
+  catch (e) { avisar('No se pudo armar el vale: ' + e.message, 'err'); return; }
+
+  const m = r.medidas;
+  const papel = $('papel');
+
+  // El papel se dibuja a su medida real en mm y después se agranda para poder
+  // leerlo: así lo que se ve en pantalla es literalmente lo que sale impreso.
+  const zoom = m.anchoMm >= 200 ? 2.2 : 3.4;
+  papel.style.width = m.anchoMm + 'mm';
+  papel.style.padding = (estado.modoMargen === 'driver' ? m.margenMm : m.margenMm) + 'mm';
+  papel.style.transform = 'scale(' + zoom + ')';
+  papel.innerHTML = r.html;
+  const interno = papel.querySelector('#hoja');
+  if (interno) { interno.style.margin = '0'; }
+  // reservar el alto que ocupa el papel ya escalado
+  papel.parentElement.style.minHeight = (m.altoHojaMm * zoom * (96 / 25.4)) + 'px';
+  $('zoomTxt').textContent = '— a escala real, ampliado ×' + zoom;
+
+  $('medidas').innerHTML = [
+    tarjeta(m.anchoMm + ' mm', 'ancho del papel'),
+    tarjeta(m.utilMm.toFixed(0) + ' mm', 'ancho útil (− ' + m.margenMm + ' mm × 2)'),
+    tarjeta(m.cols + (m.cols ? ' col.' : ''), 'columnas de texto'),
+    tarjeta(m.tamLetraPt.toFixed(2) + ' pt', 'letra medida, no fija'),
+    tarjeta(m.altoHojaMm.toFixed(1) + ' mm', 'alto de la hoja'),
+    m.lineaMasLarga == null ? '' :
+      tarjeta(m.lineaMasLarga + ' / ' + m.cols,
+        m.lineaMasLarga <= m.cols ? 'línea más larga · entra' : 'línea más larga · SE PASA'),
+  ].join('');
+
+  if (m.lineaMasLarga != null && m.lineaMasLarga > m.cols) {
+    avisar('Hay una línea más larga que el papel: el ticket saldría cortado.', 'err');
+  }
+}
+
+function tarjeta(valor, pie) {
+  return '<div><b>' + valor + '</b><span>' + pie + '</span></div>';
+}
+
+// ---------------------------------------------------------------- acciones
+function opciones() {
+  return {
+    anchoMm: estado.anchoMm,
+    modoMargen: estado.modoMargen,
+    regla: estado.regla,
+    deviceName: $('impresora').value,
+    copias: Number($('copias').value) || 1,
+  };
+}
+
+$('btnImprimir').addEventListener('click', async () => {
+  const o = opciones();
+  if (!o.deviceName) { avisar('Elegí una impresora primero.', 'info'); return; }
+  await ejecutar(() => window.sfida.imprimir(o),
+    'Se mandó a imprimir en ' + o.deviceName + ' (' + o.copias + ' copias).');
+});
+
+$('btnDialogo').addEventListener('click', async () => {
+  await ejecutar(() => window.sfida.imprimirConDialogo(opciones()),
+    'Se abrió el diálogo de impresión de Windows.');
+});
+
+$('btnPdf').addEventListener('click', async () => {
+  const r = await ejecutar(() => window.sfida.guardarPdf(opciones()), null);
+  if (r && r.ok && r.ruta) {
+    avisar('PDF guardado en ' + r.ruta + ' — abrilo y miralo antes de confiar.', 'ok');
+    window.sfida.abrirArchivo(r.ruta);
+  }
+});
+
+async function ejecutar(fn, mensajeOk) {
+  for (const b of document.querySelectorAll('.btn')) b.disabled = true;
+  let r = null;
+  try {
+    r = await fn();
+    const cabecera = new Date().toLocaleTimeString('es-PE');
+    $('log').textContent =
+      '[' + cabecera + ']  ' + (r.ok ? 'OK' : 'FALLÓ: ' + (r.motivo || 'sin motivo')) + '\n\n'
+      + 'webContents.print / printToPDF recibió:\n' + (r.config || '(sin datos)') + '\n\n'
+      + 'Medidas del documento:\n' + JSON.stringify(r.medidas, null, 2);
+    if (r.ok && mensajeOk) avisar(mensajeOk, 'ok');
+    else if (!r.ok && r.motivo !== 'cancelado') avisar('No salió: ' + (r.motivo || '?'), 'err');
+  } catch (e) {
+    $('log').textContent = 'Error: ' + (e && e.message ? e.message : e);
+    avisar('Error: ' + (e && e.message ? e.message : e), 'err');
+  } finally {
+    for (const b of document.querySelectorAll('.btn')) b.disabled = false;
+  }
+  return r;
+}
+
+let avisoTimer = null;
+function avisar(texto, tipo) {
+  const c = $('aviso');
+  c.innerHTML = '<div class="aviso ' + tipo + '">' + texto + '</div>';
+  clearTimeout(avisoTimer);
+  avisoTimer = setTimeout(() => { c.innerHTML = ''; }, 8000);
+}
+
+// ------------------------------------------------------------------ arranque
+cargarImpresoras().then(refrescar);
+</script>
+</body>
+</html>

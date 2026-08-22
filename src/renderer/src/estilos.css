@@ -1,0 +1,88 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+ * Paleta de SFIDA.
+ *
+ * Los valores salen de `sfida_estilo.py` del proyecto Python (sección 5 de
+ * MIGRACION_INVENTARIO.md). No se inventan colores nuevos: la app tiene que
+ * seguir siendo reconocible para quien la usa todos los días.
+ * ------------------------------------------------------------------------- */
+@theme {
+  --color-lateral: #1c2536;
+  --color-lateral-txt: #9fb0c9;
+  --color-lateral-hov: #26324a;
+
+  --color-coral: #e5484d;
+  --color-coral-clr: #fdecec;
+
+  --color-azul: #2f6fed;
+  --color-azul-osc: #2559c9;
+  --color-azul-clr: #5a8df3;
+  --color-celeste: #e8f0fe;
+
+  --color-verde: #22a06b;
+  --color-verde-clr: #e5f6ee;
+
+  --color-ambar: #f5a623;
+  --color-ambar-osc: #a76c05;
+  --color-ambar-clr: #fdf3e1;
+
+  --color-gris-fondo: #f6f8fb;
+  --color-gris-cab: #f1f4f9;
+  --color-borde: #e6eaf0;
+  --color-separador: #eef1f6;
+  --color-texto: #1f2733;
+  --color-suave: #7b8794;
+
+  --font-sans:
+    'Segoe UI Variable Display', 'Segoe UI', 'SF Pro Display', Inter, 'DejaVu Sans', Arial,
+    sans-serif;
+
+  /* alto de fila de las tablas, igual que ALTO_FILA = 44 en Qt */
+  --spacing-fila: 44px;
+}
+
+html,
+body,
+#raiz {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-gris-fondo);
+  color: var(--color-texto);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  /* la app es de escritorio: el texto no se selecciona como en una web */
+  user-select: none;
+  cursor: default;
+}
+
+/* Barra de desplazamiento discreta, como la de la versión Qt (10 px) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd3df;
+  border-radius: 5px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #aeb8c7;
+}
+
+/* Quien apaga las animaciones en el sistema, no las ve. Se respeta siempre,
+   además del interruptor propio de Control Maestro (fase 3). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

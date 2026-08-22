@@ -1,0 +1,32 @@
+# dependencias
+node_modules/
+
+# la copia de desarrollo de la base NUNCA va al repositorio:
+# es una copia de datos del almacén
+datos/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# compilado
+out/
+dist/
+release/
+.vite/
+
+# salidas de prueba
+capturas/
+prototipo-impresion/salida/
+prototipo-impresion/paquete/
+
+# sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# artefactos de tsc
+*.tsbuildinfo
+
+# salidas de verificacion de impresion
+salida-impresion/

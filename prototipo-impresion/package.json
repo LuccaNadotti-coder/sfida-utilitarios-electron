@@ -1,0 +1,14 @@
+{
+  "name": "sfida-prototipo-impresion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FASE 0 - Prueba de impresion termica (GOOJPRT 80mm / 58mm / A4) antes de migrar SFIDA a Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "verificar": "electron . --verificar"
+  },
+  "devDependencies": {
+    "electron": "43.2.0"
+  }
+}

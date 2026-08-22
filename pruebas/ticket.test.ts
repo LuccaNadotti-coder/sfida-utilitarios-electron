@@ -1,0 +1,224 @@
+/* ---------------------------------------------------------------------------
+ * El ticket tiene que respetar el ancho del papel y quedar alineado.
+ *
+ * Port de las pruebas del bloque «el vale imprimible en formato ticket» de
+ * `test_app.py`. Vigilan errores que YA aparecieron una vez en la versión Qt:
+ * si el ancho de la columna del artículo y la sangría no coinciden, el vale
+ * sale con las líneas corridas o cortado por la cuchilla.
+ *
+ * Corren sin abrir ninguna ventana: el armado del ticket es texto puro.
+ * ------------------------------------------------------------------------- */
+import { describe, expect, it } from 'vitest';
+
+import type { CabeceraSalida, DetalleSalida } from '../src/compartido/contrato';
+import {
+  COLUMNAS,
+  SANGRIA_CAMPO,
+  SANGRIA_ITEM,
+  bloqueFirmas,
+  campo,
+  cortar,
+  htmlA4,
+  textoTicket,
+  type DatosVale,
+} from '../src/main/impresion/ticket';
+
+function vale(det: Array<Partial<DetalleSalida>>, cab: Partial<CabeceraSalida> = {}): DatosVale {
+  return {
+    cab: {
+      id: 1,
+      nro_vale: 'V2026-0042',
+      fecha: '2026-08-21',
+      sucursal_id: 1,
+      entregado_por: 'CARLOS RAMIREZ',
+      recibido_por: 'MARIA FERNANDEZ',
+      observacion: '',
+      sucursal: 'TIENDA SAN JUAN DE LURIGANCHO',
+      suc_codigo: 'SUC03',
+      direccion: 'AV. PROCERES DE LA INDEPENDENCIA 1845',
+      responsable: null,
+      items: 0,
+      unidades: 0,
+      ...cab,
+    } as CabeceraSalida,
+    det: det.map((d, i) => ({
+      id: i + 1,
+      articulo_id: i + 1,
+      cantidad: 1,
+      codigo: 'OFI-0001',
+      nombre: 'ARTICULO',
+      unidad: 'UND',
+      ...d,
+    })) as DetalleSalida[],
+    empresa: 'SFIDA',
+    empresaDir: 'AV. INDUSTRIAL 450 - LIMA',
+    empresaRuc: '20512345678',
+    impresoEl: '21/08/2026 22:32',
+  };
+}
+
+const DETALLE_TIPICO = [
+  { codigo: 'OFI-0010', nombre: 'PAPEL BOND A4 75GR', cantidad: 3, unidad: 'MLL' },
+  { codigo: 'OFI-0001', nombre: 'LAPICERO AZUL FABER CASTELL TRILUX 034', cantidad: 24, unidad: 'UND' },
+  { codigo: 'LIM-0003', nombre: 'JABON LIQUIDO PARA MANOS', cantidad: 5, unidad: 'GAL' },
+  { codigo: 'LIM-0004', nombre: 'DETERGENTE EN POLVO', cantidad: 2.5, unidad: 'KG' },
+];
+
+describe('ancho del papel', () => {
+  for (const mm of [80, 58] as const) {
+    it(`ninguna linea del ticket de ${mm} mm se pasa del papel`, () => {
+      const lineas = textoTicket(vale(DETALLE_TIPICO), mm).split('\n');
+      const largas = lineas.filter((l) => l.length > COLUMNAS[mm]!);
+      expect(largas).toEqual([]);
+    });
+  }
+
+  it('un nombre larguisimo sin espacios tampoco desborda', () => {
+    const lineas = textoTicket(
+      vale([{ nombre: 'X'.repeat(120), codigo: 'OFI-9999', cantidad: 1, unidad: 'UND' }]),
+      80,
+    ).split('\n');
+    expect(lineas.filter((l) => l.length > 42)).toEqual([]);
+  });
+
+  it('una direccion de sucursal larguisima tampoco desborda', () => {
+    const lineas = textoTicket(
+      vale(DETALLE_TIPICO, { direccion: 'AVENIDA '.repeat(30) }),
+      58,
+    ).split('\n');
+    expect(lineas.filter((l) => l.length > 30)).toEqual([]);
+  });
+});
+
+describe('alineacion de las columnas', () => {
+  it('el nombre del articulo y su codigo arrancan en la misma columna', () => {
+    const lineas = textoTicket(vale(DETALLE_TIPICO), 80).split('\n');
+
+    // línea de artículo: «   24 UND   LAPICERO…»
+    const desalineadas: string[] = [];
+    for (const l of lineas) {
+      const m = /^\s*[\d.,]+ [A-Z0-9]+\s+(\S)/.exec(l);
+      if (m && l.indexOf(m[1]!, m.index) !== SANGRIA_ITEM) desalineadas.push(l);
+    }
+
+    // línea del código: sangrada exactamente SANGRIA_ITEM
+    const codigos = lineas.filter((l) => /^ +(OFI|LIM)-\d+/.test(l));
+    for (const l of codigos) {
+      if (l.length - l.replace(/^ +/, '').length !== SANGRIA_ITEM) desalineadas.push(l);
+    }
+
+    expect(codigos.length).toBeGreaterThan(0);
+    expect(desalineadas).toEqual([]);
+  });
+
+  it('la cabecera sangra la continuacion bajo el valor', () => {
+    const c = campo('DESTINO :', 'SUCURSAL SAN JUAN DE LURIGANCHO', 30);
+    expect(c.length).toBeGreaterThan(1);
+    expect(c.every((l) => l.length <= 30)).toBe(true);
+    expect(c[1]!.startsWith(' '.repeat(SANGRIA_CAMPO))).toBe(true);
+    expect(c[1]![SANGRIA_CAMPO]).not.toBe(' ');
+  });
+
+  it('la equivalencia larga se parte en vez de cortarse a la mitad', () => {
+    const trozos = cortar('OFI-0001 = 3000 UND', 18);
+    expect(trozos.every((t) => t.length <= 18)).toBe(true);
+    expect(trozos.join(' ')).toContain('UND');
+  });
+});
+
+describe('firmas', () => {
+  it('en 80 mm van lado a lado', () => {
+    const l = bloqueFirmas(42);
+    expect(l.some((x) => x.includes('ENTREGUE CONFORME') && x.includes('RECIBI CONFORME'))).toBe(true);
+  });
+
+  it('en 58 mm van una debajo de la otra', () => {
+    const l = bloqueFirmas(30);
+    expect(l.some((x) => x.includes('ENTREGUE CONFORME') && !x.includes('RECIBI CONFORME'))).toBe(true);
+    expect(l.some((x) => x.includes('RECIBI CONFORME') && !x.includes('ENTREGUE CONFORME'))).toBe(true);
+  });
+
+  it('el corte esta en 38 columnas', () => {
+    expect(bloqueFirmas(38).length).toBe(5); // lado a lado
+    expect(bloqueFirmas(37).length).toBe(9); // apiladas
+  });
+});
+
+describe('contenido del vale', () => {
+  it('lleva membrete, numero de vale y las dos firmas', () => {
+    const t = textoTicket(vale(DETALLE_TIPICO), 80);
+    expect(t).toContain('VALE DE SALIDA DE ALMACEN');
+    expect(t).toContain('SFIDA');
+    expect(t).toContain('RUC 20512345678');
+    expect(t).toContain('V2026-0042');
+    expect(t).toContain('ENTREGUE CONFORME');
+    expect(t).toContain('RECIBI CONFORME');
+  });
+
+  it('la fecha sale en dd/mm/aaaa', () => {
+    expect(textoTicket(vale(DETALLE_TIPICO), 80)).toContain('21/08/2026');
+  });
+
+  it('imprime las equivalencias de las unidades que las tienen', () => {
+    const t = textoTicket(vale(DETALLE_TIPICO), 80);
+    expect(t).toContain('3000 UND'); // 3 MLL
+    expect(t).toContain('18.93 L'); // 5 GAL
+  });
+
+  it('NO inventa equivalencia para las unidades base ni las de factor 1', () => {
+    const t = textoTicket(vale([{ codigo: 'LIM-0004', nombre: 'DETERGENTE', cantidad: 2, unidad: 'KG' }]), 80);
+    expect(t).not.toContain('=  2 KG');
+  });
+
+  it('los totales cuentan articulos y unidades', () => {
+    const t = textoTicket(vale(DETALLE_TIPICO), 80);
+    expect(t).toContain('TOTAL DE ARTICULOS:');
+    expect(t).toMatch(/TOTAL DE ARTICULOS:\s+4/);
+    // 3 + 24 + 5 + 2.5 = 34.5
+    expect(t).toMatch(/TOTAL DE UNIDADES:\s+34\.50/);
+  });
+
+  it('termina con tres lineas en blanco para la cuchilla', () => {
+    const l = textoTicket(vale(DETALLE_TIPICO), 80).split('\n');
+    expect(l.slice(-3).every((x) => x.trim() === '')).toBe(true);
+  });
+
+  it('CAMBIO DELIBERADO: la observacion se imprime cuando existe', () => {
+    const con = textoTicket(vale(DETALLE_TIPICO, { observacion: 'ENTREGA DE LA SEMANA 34' }), 80);
+    expect(con).toContain('OBSERV. :');
+    expect(con).toContain('ENTREGA DE LA SEMANA 34');
+
+    const sin = textoTicket(vale(DETALLE_TIPICO, { observacion: '' }), 80);
+    expect(sin).not.toContain('OBSERV. :');
+  });
+
+  it('la direccion de la sucursal solo sale si existe', () => {
+    expect(textoTicket(vale(DETALLE_TIPICO), 80)).toContain('DIRECC. :');
+    expect(textoTicket(vale(DETALLE_TIPICO, { direccion: null }), 80)).not.toContain('DIRECC. :');
+  });
+
+  it('quien entrega y quien recibe caen en «-» si estan vacios', () => {
+    const t = textoTicket(vale(DETALLE_TIPICO, { entregado_por: '', recibido_por: '' }), 80);
+    expect(t).toContain('ENTREGA : -');
+    expect(t).toContain('RECIBE   : -'.replace('  ', ' ')); // el rótulo ya trae su espaciado
+  });
+});
+
+describe('version A4', () => {
+  it('usa tabla de verdad y no el ticket monoespaciado', () => {
+    const h = htmlA4(vale(DETALLE_TIPICO));
+    expect(h).toContain('<table');
+    expect(h).toContain('Recib');
+    expect(h).toContain('VALE DE SALIDA');
+  });
+
+  it('escapa el HTML de los nombres', () => {
+    const h = htmlA4(vale([{ nombre: 'CINTA <b>ANCHA</b> & FUERTE', codigo: 'X-1', cantidad: 1, unidad: 'UND' }]));
+    expect(h).toContain('&lt;b&gt;');
+    expect(h).toContain('&amp;');
+  });
+
+  it('incluye la observacion cuando existe', () => {
+    expect(htmlA4(vale(DETALLE_TIPICO, { observacion: 'URGENTE' }))).toContain('URGENTE');
+  });
+});
