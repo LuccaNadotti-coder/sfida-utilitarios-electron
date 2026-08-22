@@ -1,0 +1,32 @@
+# Saltos de línea
+#
+# El repositorio guarda SIEMPRE LF; en el disco, git usa lo que le pida cada
+# regla de acá. Sin esto, un archivo editado en Windows y otro editado en otra
+# máquina se ven como «cambió el archivo entero» aunque no se haya tocado una
+# sola línea.
+
+* text=auto eol=lf
+
+# Los scripts de Windows van con CRLF a propósito.
+# `empaquetar.ps1` usa un here-string (@'...'@) y esos son sensibles a los
+# saltos de línea: con LF, algunas versiones de PowerShell no cierran el bloque.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# Binarios: que git no intente convertirlos ni mostrar diferencias de texto.
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.pdf   binary
+*.exe   binary
+*.node  binary
+*.db    binary
+
+# Los lock son generados: no ensucian los diffs ni cuentan como código propio.
+package-lock.json  linguist-generated=true -diff
+
+# El inventario y el fijo del esquema son la especificación del port: conviene
+# verlos como texto siempre, aunque tengan caracteres raros.
+MIGRACION_INVENTARIO.md       text
+pruebas/fijos/esquema-python.txt  text
