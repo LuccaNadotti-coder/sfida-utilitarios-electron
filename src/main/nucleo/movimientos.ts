@@ -46,8 +46,15 @@ interface LineaConvertida {
   cantidad: number;
   /** Costo ya por unidad de stock. */
   costo: number;
-  cantidadOrigen: number;
-  unidadOrigen: string;
+  /**
+   * Lo que se digitó de verdad, para poder imprimirlo.
+   *
+   * Va en NULL cuando no hay una sola respuesta honesta: por ejemplo al juntar
+   * «1 GAL» con «500 ML» del mismo artículo. Ahí el ticket imprime la unidad
+   * de stock, que siempre es correcta.
+   */
+  cantidadOrigen: number | null;
+  unidadOrigen: string | null;
 }
 
 /**
@@ -350,15 +357,30 @@ export function registrarSalida(db: Database, d: DatosSalida): number {
 
   const lineas = d.items.map((l) => convertirLinea(db, l));
 
-  // Suma las cantidades del mismo artículo ANTES de validar el stock.
+  // Suma las cantidades del mismo artículo ANTES de validar el stock: si no,
+  // dos filas de 6 pasarían el control teniendo 10, y recién al guardar se
+  // descubriría que el stock quedó negativo.
   const pedido = new Map<number, LineaConvertida>();
   for (const l of lineas) {
     const ya = pedido.get(l.articuloId);
-    if (ya) {
-      ya.cantidad += l.cantidad;
+    if (!ya) {
+      pedido.set(l.articuloId, { ...l });
+      continue;
+    }
+    // La cantidad de stock SIEMPRE se puede sumar: las dos están en la misma
+    // unidad porque `convertirLinea()` ya las pasó a la del artículo.
+    ya.cantidad += l.cantidad;
+
+    // Lo digitado, en cambio, solo se puede sumar si las dos filas venían en
+    // la MISMA unidad. Sumar «1 GAL» con «500 ML» daba 501 con la etiqueta
+    // GAL, y el ticket salía impreso diciendo 501 galones. Cuando no coinciden
+    // se descarta el origen y el ticket cae en la unidad de stock, que no
+    // miente.
+    if (ya.unidadOrigen !== null && ya.unidadOrigen === l.unidadOrigen && ya.cantidadOrigen !== null && l.cantidadOrigen !== null) {
       ya.cantidadOrigen += l.cantidadOrigen;
     } else {
-      pedido.set(l.articuloId, { ...l });
+      ya.cantidadOrigen = null;
+      ya.unidadOrigen = null;
     }
   }
 

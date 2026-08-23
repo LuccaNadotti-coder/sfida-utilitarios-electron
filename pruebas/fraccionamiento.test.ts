@@ -142,6 +142,49 @@ describe('compro en galones, reparto en litros', () => {
     expect(det[0]!.cantidad).toBeCloseTo(3.785 + 0.5, 4);
   });
 
+  it('al juntar unidades distintas NO inventa una cantidad digitada', () => {
+    // Sumar «1 GAL» con «500 ML» daba 501 con la etiqueta GAL, y el ticket
+    // salía impreso diciendo 501 galones: casi 1900 litros de lejía en un
+    // papel firmado. Cuando no hay una respuesta honesta, se guarda NULL y el
+    // ticket cae en la unidad de stock.
+    ingresarStock(db, [[lejia, 10, 5, 'GAL']], { nroProveedor: 'B-9', proveedor: 'PROV' });
+    const id = sacarStock(db, suc, [
+      [lejia, 1, 'GAL'],
+      [lejia, 500, 'ML'],
+    ]);
+    const d = detalleSalida(db, id)[0]!;
+    expect(d.cantidad_origen).toBeNull();
+    expect(d.unidad_origen).toBeNull();
+    // La cantidad de verdad sigue estando bien.
+    expect(d.cantidad).toBeCloseTo(4.285, 4);
+  });
+
+  it('si las dos filas vienen en la MISMA unidad, sí se suma lo digitado', () => {
+    ingresarStock(db, [[lejia, 10, 5, 'GAL']], { nroProveedor: 'B-10', proveedor: 'PROV' });
+    const id = sacarStock(db, suc, [
+      [lejia, 1, 'GAL'],
+      [lejia, 2, 'GAL'],
+    ]);
+    const d = detalleSalida(db, id)[0]!;
+    expect(d.cantidad_origen).toBe(3);
+    expect(d.unidad_origen).toBe('GAL');
+    expect(d.cantidad).toBeCloseTo(3 * 3.785, 4);
+  });
+
+  it('el ingreso NO agrupa: la misma boleta puede traer dos precios', () => {
+    // Es la diferencia deliberada con las salidas. Si se agruparan, se perdería
+    // el precio de una de las dos compras y la valorización quedaría mal.
+    const id = ingresarStock(
+      db,
+      [
+        [lejia, 1, 22, 'GAL'],
+        [lejia, 1, 30, 'GAL'],
+      ],
+      { nroProveedor: 'B-11', proveedor: 'PROV' },
+    );
+    expect(detalleIngreso(db, id)).toHaveLength(2);
+  });
+
   it('mezclar familias distintas da un error claro', () => {
     expect(() =>
       ingresarStock(db, [[lejia, 1, 10, 'KG']], { nroProveedor: 'B-8', proveedor: 'PROV' }),

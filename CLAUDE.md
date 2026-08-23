@@ -199,8 +199,28 @@ cantidad valorizaría el inventario 3.785 veces de más **sin que nada avise**.
 existe) y eso se transforma en un error para la persona, nunca en una
 conversión inventada.
 
-**La tabla de unidades está duplicada en el renderer** (`ui/unidades.ts`) para
-no ir al proceso principal en cada tecla. Si se toca una, hay que tocar la otra.
+**La tabla de unidades está duplicada** en `compartido/conversion.ts` para no
+ir al proceso principal en cada tecla. Si se toca una, hay que tocar la otra:
+lo vigila `pruebas/unidades.test.ts`.
+
+Vive en `compartido/` y no en `renderer/` porque ahí la ven los tres lados **y
+la pueden importar las pruebas**. Estando en `renderer/ui/` no se podía probar
+sin romper el límite entre los dos proyectos de TypeScript.
+
+### Un artículo no se repite en un vale de salida
+
+En **salidas** un artículo aparece una sola vez: `agregar()` lo suma a la fila
+que ya está (`juntarEnVale()`), y si las unidades no coinciden pasa todo a la
+unidad de stock.
+
+En **ingresos** sí se puede repetir, y es a propósito: la misma boleta puede
+traer el mismo artículo a dos precios distintos, y son dos líneas legítimas.
+Por eso `registrarIngreso()` **no** agrupa y `registrarSalida()` **sí**.
+
+**Al agrupar, `cantidad_origen`/`unidad_origen` se van a NULL si las dos filas
+venían en unidades distintas.** Sumar «1 GAL» con «500 ML» daba 501 con la
+etiqueta GAL, y el ticket salía impreso diciendo 501 galones. Cuando no hay una
+respuesta honesta, el ticket cae en la unidad de stock, que nunca miente.
 
 ### Movimientos
 

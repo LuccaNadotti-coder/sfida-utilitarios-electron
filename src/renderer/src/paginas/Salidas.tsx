@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { ArticuloListado, SalidaListada, SucursalConTotales } from '../../../compartido/contrato';
+import { convertirAStock, juntarEnVale } from '../../../compartido/conversion';
 import type { DestinoExtra } from '../App';
 import { DlgClave } from '../dialogos/Clave';
 import { DlgDetalleSalida } from '../dialogos/DetalleSalida';
@@ -38,7 +39,6 @@ import {
   useDebounce,
   usarConfirmacion,
 } from '../ui/base';
-import { convertirAStock } from '../ui/unidades';
 
 interface Linea {
   articuloId: number;
@@ -141,6 +141,34 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
         'err',
       );
     }
+    // Un artículo no puede aparecer dos veces en el mismo vale: se suma a la
+    // fila que ya está.
+    //
+    // No es cosmético. El núcleo YA suma las filas repetidas antes de guardar,
+    // así que dos renglones de BORRADOR terminaban siendo uno solo en la base
+    // y en el ticket: la pantalla mostraba una cosa y se guardaba otra. Y peor,
+    // el control de «cuánto queda» se leía mal, porque el descuento estaba
+    // repartido en dos renglones.
+    //
+    // En INGRESOS sí se puede repetir, y es a propósito: la misma boleta puede
+    // traer el mismo artículo a dos precios distintos.
+    const yaEsta = lineas.findIndex((l) => l.articuloId === elegido);
+    if (yaEsta >= 0) {
+      const previa = lineas[yaEsta]!;
+      const mismaUnidad = previa.unidad === u;
+      const nueva = juntarEnVale(previa, { cantidad, unidad: u }, a.unidad);
+      setLineas((prev) => prev.map((l, i) => (i === yaEsta ? nueva : l)));
+      avisar(
+        mismaUnidad
+          ? `${a.nombre} ya estaba en el vale: se sumó a esa fila (${fmtNum(nueva.cantidad)} ${nueva.unidad}).`
+          : `${a.nombre} ya estaba en el vale en otra unidad: se juntó todo en ${fmtNum(nueva.cantidad)} ${a.unidad}.`,
+        'info',
+      );
+      setElegido(null);
+      setCantidad(0);
+      return;
+    }
+
     setLineas((prev) => [...prev, { articuloId: elegido, cantidad, unidad: u }]);
     setElegido(null);
     setCantidad(0);
@@ -282,7 +310,8 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
               },
             ]}
             filas={lineas}
-            clave={(l) => `${l.articuloId}-${lineas.indexOf(l)}`}
+            // El artículo alcanza como clave: en un vale no se repite.
+            clave={(l) => l.articuloId}
             vacio={{ titulo: 'Todavía no agregaste ningún artículo', detalle: 'Elegí uno arriba, poné la cantidad y tocá «Agregar».' }}
           />
         </div>

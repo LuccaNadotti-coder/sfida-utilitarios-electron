@@ -297,6 +297,14 @@ Cuando se manda mercadería a un local.
 > cuánto queda. La cuenta la hace en la unidad chica: si hay 3.785 litros y
 > pedís 5000 ml, te avisa que no alcanza.
 
+> **Un artículo aparece una sola vez en el vale.** Si agregás algo que ya
+> estaba, se **suma a la fila que ya tenías** y el programa te lo avisa. Si lo
+> pusiste en otra unidad, junta todo en la unidad de stock. Para corregir una
+> cantidad, tocá **Quitar** en esa fila y volvé a agregarla.
+>
+> *En los ingresos sí se puede repetir el mismo artículo, y es a propósito: una
+> boleta puede traer el mismo producto a dos precios distintos.*
+
 La casilla **«Imprimir el vale al guardar»** viene marcada: apenas guardás, se
 abre la ventana de impresión. Si no querés imprimir ahora, destildala.
 
