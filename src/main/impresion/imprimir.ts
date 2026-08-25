@@ -10,6 +10,7 @@
  *   6. si se destruye la última ventana, Electron cierra la app  -> ventana ancla
  *   7. esperar document.fonts.ready antes de medir
  *   8. el tamaño de letra se mide, no se fija
+ *   9. el alto a medida NO se le pide a la impresora: la centra (ver abajo)
  * ------------------------------------------------------------------------- */
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -75,6 +76,7 @@ async function abrirVale(
   c: Comprobante,
   anchoMm: AnchoPapel,
   modoMargen: ModoMargen = 'driver',
+  declararTamano = true,
 ): Promise<ValeAbierto> {
   const esA4 = anchoMm >= 200;
   const html = documentoVale({
@@ -82,6 +84,7 @@ async function abrirVale(
     texto: esA4 ? null : textoDe(c, anchoMm),
     htmlA4: esA4 ? htmlDe(c) : null,
     modoMargen,
+    declararTamano,
   });
 
   const carpeta = mkdtempSync(join(tmpdir(), 'sfida-vale-'));
@@ -120,9 +123,36 @@ function cerrarVale(v: Pick<ValeAbierto, 'w' | 'carpeta'>): void {
   }
 }
 
-/** TRAMPA 1: `print()` mide en MICRONES. */
-function pageSizeParaPrint(anchoMm: number, altoHojaMm: number): 'A4' | { width: number; height: number } {
+/**
+ * TRAMPA 1: `print()` mide en MICRONES.
+ *
+ * TRAMPA 9, y es la que dejaba media hoja en blanco arriba de cada ticket:
+ * cuando se pide una hoja a medida, Chromium la manda a Windows en el
+ * DEVMODE (`dmPaperWidth`/`dmPaperLength`) SIN apagar `dmPaperSize`. Con la
+ * bandera del papel puesta, casi ningún controlador mira el alto a medida:
+ * se queda con el papel que tiene configurado (una A4, o el rollo de 297 mm).
+ * Entonces la hoja que armó Chromium —80 × 150 mm, pongamos— es más chica que
+ * la del controlador y **Chromium la centra**: quedan dos franjas en blanco
+ * iguales, una arriba y otra abajo. Por eso el PDF salía bien (ahí la medida
+ * la pone Chromium y nadie la discute) y el papel salía con la mitad vacía.
+ *
+ * La versión de Python no lo sufría porque Qt dibuja el vale desde el borde
+ * de arriba de la hoja, mida lo que mida.
+ *
+ * La única forma segura de que el ticket empiece arriba de todo es que la
+ * hoja mida lo mismo que el papel del controlador, y para eso hay que NO
+ * pedir ninguna medida: `undefined` deja mandar a la impresora.
+ *
+ * `ajustarAlto` vuelve al modo anterior, para los rollos cuyo controlador sí
+ * acepta el alto a medida y corta el papel justo donde termina el vale.
+ */
+function pageSizeParaPrint(
+  anchoMm: number,
+  altoHojaMm: number,
+  ajustarAlto: boolean,
+): 'A4' | { width: number; height: number } | undefined {
   if (anchoMm >= 200) return 'A4';
+  if (!ajustarAlto) return undefined;
   return {
     width: Math.round(anchoMm * MICRAS_POR_MM),
     height: Math.round(Math.max(altoHojaMm, 40) * MICRAS_POR_MM),
@@ -163,9 +193,13 @@ export async function imprimirVale(
   anchoMm: AnchoPapel,
   deviceName: string,
   copias: number,
+  ajustarAlto = false,
   modoMargen: ModoMargen = 'driver',
 ): Promise<{ ok: boolean; motivo?: string }> {
-  const v = await abrirVale(c, anchoMm, modoMargen);
+  // El A4 sí declara su tamaño; el ticket solo cuando además se le pide la
+  // medida a la impresora. Si no, manda el papel del controlador.
+  const declararTamano = anchoMm >= 200 || ajustarAlto;
+  const v = await abrirVale(c, anchoMm, modoMargen, declararTamano);
   try {
     const config: Electron.WebContentsPrintOptions = {
       silent: true,
@@ -173,8 +207,12 @@ export async function imprimirVale(
       copies: Math.max(1, Number(copias) || 1),
       printBackground: true,
       color: false,
-      pageSize: pageSizeParaPrint(anchoMm, v.medidas.altoHojaMm),
     };
+    // TRAMPA 9: si no se pide medida, la hoja es la del controlador y el
+    // ticket arranca arriba de todo. Pedirla y que no la respeten es lo que
+    // deja el ticket centrado, con media hoja en blanco encima.
+    const hoja = pageSizeParaPrint(anchoMm, v.medidas.altoHojaMm, ajustarAlto);
+    if (hoja) config.pageSize = hoja;
     // TRAMPA 4
     if (modoMargen === 'driver') config.margins = { marginType: 'none' };
 

@@ -107,7 +107,7 @@ describe('se aplica al guardar', () => {
     // v5: «quien entrega» y «quien recibe» ya no se digitan; van como
     // renglones en blanco en el ticket impreso.
     const sal = listarSalidas(db)[0]!;
-    expect(sal.nro_vale).toMatch(/^V\d{4}-\d{4}$/);
+    expect(sal.nro_vale).toMatch(/^E\d{4}-\d{4}$/);
   });
 
   it('la busqueda sigue sin distinguir mayusculas', () => {

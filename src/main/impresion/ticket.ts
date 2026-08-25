@@ -221,7 +221,7 @@ function lineasDetalle(det: LineaImprimible[], cols: number): string[] {
   return cuerpo;
 }
 
-/** Texto plano del ticket de SALIDA (80 o 58 mm). */
+/** Texto plano del ticket de EGRESO (80 o 58 mm). */
 export function textoTicket(v: DatosVale, anchoMm: number): string {
   const cols = COLUMNAS[anchoMm] ?? 42;
   const linea = '-'.repeat(cols);
@@ -231,10 +231,10 @@ export function textoTicket(v: DatosVale, anchoMm: number): string {
   const totalItems = v.det.length;
   const totalUnd = v.det.reduce((s, d) => s + Number(d.cantidad), 0);
 
-  // v5: el título es «SALIDA DE ALMACEN» (antes «VALE DE SALIDA DE ALMACEN»),
+  // v5: el título es «EGRESO DE ALMACEN» (antes «VALE DE SALIDA DE ALMACEN»),
   // y ya NO salen las líneas ENTREGA/RECIBE en la cabecera: esos datos se
   // escriben a mano sobre las firmas del pie.
-  const cabecera = ['SALIDA DE ALMACEN', linea];
+  const cabecera = ['EGRESO DE ALMACEN', linea];
   cabecera.push(...campo('N° VALE :', v.cab.nro_vale, cols));
   cabecera.push(...campo('FECHA   :', dmy(v.cab.fecha), cols));
   cabecera.push(...campo('DESTINO :', `${v.cab.suc_codigo} - ${v.cab.sucursal}`, cols));
@@ -313,7 +313,7 @@ export function htmlA4(v: DatosVale): string {
     `<div style="font-size:8pt;color:#555">${esc(v.empresaDir)}` +
     (v.empresaRuc ? `  &middot;  RUC ${esc(v.empresaRuc)}` : '') +
     '</div></td>' +
-    '<td align="right"><div style="font-size:13pt;font-weight:bold">VALE DE SALIDA</div>' +
+    '<td align="right"><div style="font-size:13pt;font-weight:bold">VALE DE EGRESO</div>' +
     `<div style="font-size:14pt;font-weight:bold">N&deg; ${esc(v.cab.nro_vale)}</div>` +
     `<div style="font-size:9pt;color:#555">${dmy(v.cab.fecha)}</div></td>` +
     '</tr></table>' +

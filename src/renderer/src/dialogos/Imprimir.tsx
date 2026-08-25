@@ -39,6 +39,7 @@ export function DlgImprimir({
   const [impresora, setImpresora] = useState('');
   const [papel, setPapel] = useState<AnchoPapel>(80);
   const [copias, setCopias] = useState(2);
+  const [ajustarAlto, setAjustarAlto] = useState(false);
   const [previa, setPrevia] = useState<VistaPreviaVale | null>(null);
   const [trabajando, setTrabajando] = useState(false);
 
@@ -52,6 +53,7 @@ export function DlgImprimir({
       setImpresoras(lista ?? []);
       if (prefs) {
         setPapel(prefs.papel);
+        setAjustarAlto(prefs.ajustarAlto);
         // Solo se restaura la impresora si sigue instalada.
         if (prefs.impresora && (lista ?? []).some((i) => i.name === prefs.impresora)) {
           setImpresora(prefs.impresora);
@@ -77,7 +79,9 @@ export function DlgImprimir({
     }
     setTrabajando(true);
     const r = await pedir(
-      window.sfida.impresion.imprimir({ tipo, id, anchoMm: papel, deviceName: impresora, copias }),
+      window.sfida.impresion.imprimir({
+        tipo, id, anchoMm: papel, deviceName: impresora, copias, ajustarAlto,
+      }),
     );
     setTrabajando(false);
     if (!r) return;
@@ -107,7 +111,7 @@ export function DlgImprimir({
   return (
     <Dialogo
       abierto={abierto}
-      titulo={tipo === 'salida' ? 'Imprimir vale de salida' : 'Imprimir comprobante de ingreso'}
+      titulo={tipo === 'salida' ? 'Imprimir vale de egreso' : 'Imprimir comprobante de ingreso'}
       alCerrar={alCerrar}
       ancho="max-w-[900px]"
       pie={
@@ -143,6 +147,25 @@ export function DlgImprimir({
             <Etiqueta>Tamaño del papel</Etiqueta>
             <Chips valor={String(papel)} alElegir={(v) => setPapel(Number(v) as AnchoPapel)} opciones={PAPELES.map((p) => ({ id: String(p.id), texto: p.texto }))} />
           </div>
+
+          {papel < 200 && (
+            <div>
+              <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={ajustarAlto}
+                  onChange={(e) => setAjustarAlto(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>Cortar el papel justo donde termina el vale</span>
+              </label>
+              <p className="mt-1.5 text-[12px] text-suave">
+                Dejalo destildado si al imprimir queda mucho espacio en blanco arriba: casi
+                ninguna impresora acepta que le pidan el alto de la hoja, y cuando no lo
+                acepta manda el vale al medio del papel.
+              </p>
+            </div>
+          )}
 
           <div>
             <Etiqueta>Copias</Etiqueta>

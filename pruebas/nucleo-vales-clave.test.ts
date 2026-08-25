@@ -61,12 +61,24 @@ describe('numeracion de vales (MAX, no COUNT)', () => {
   const ANIO = new Date().getFullYear();
 
   it('el primer vale del año es 0001', () => {
-    expect(siguienteNroVale(db)).toBe(`V${ANIO}-0001`);
+    expect(siguienteNroVale(db)).toBe(`E${ANIO}-0001`);
   });
 
   it('avanza con cada vale registrado', () => {
     sacarStock(db, suc, [[art, 1]]);
-    expect(siguienteNroVale(db)).toBe(`V${ANIO}-0002`);
+    expect(siguienteNroVale(db)).toBe(`E${ANIO}-0002`);
+  });
+
+  it('sigue el correlativo de los vales viejos con prefijo V', () => {
+    // Hasta la v5.0.1 la letra era «V». Si el correlativo mirara solo la «E»,
+    // el año del cambio arrancaría otra vez en 0001 y quedarían dos
+    // numeraciones conviviendo en la misma tabla.
+    db.prepare('INSERT INTO salidas (nro_vale, fecha, sucursal_id) VALUES (?,?,?)').run(
+      `V${ANIO}-0007`,
+      `${ANIO}-01-05`,
+      suc,
+    );
+    expect(siguienteNroVale(db)).toBe(`E${ANIO}-0008`);
   });
 
   it('CAMBIO DELIBERADO: anular un vale del medio ya no propone un numero ocupado', () => {
@@ -82,7 +94,7 @@ describe('numeracion de vales (MAX, no COUNT)', () => {
     eliminarSalida(db, ids[1]!);
 
     const propuesto = siguienteNroVale(db);
-    expect(propuesto).toBe(`V${ANIO}-0004`); // con COUNT(*) habría propuesto 0003
+    expect(propuesto).toBe(`E${ANIO}-0004`); // con COUNT(*) habría propuesto 0003
     expect(existeVale(db, propuesto)).toBe(false); // y sobre todo: NO está ocupado
   });
 
@@ -98,11 +110,11 @@ describe('numeracion de vales (MAX, no COUNT)', () => {
     const v1 = sacarStock(db, suc, [[art, 1]]);
     const v2n = siguienteNroVale(db);
     const v2 = sacarStock(db, suc, [[art, 1]]);
-    expect(v2n).toBe(`V${ANIO}-0002`);
+    expect(v2n).toBe(`E${ANIO}-0002`);
 
     eliminarSalida(db, v2);
-    expect(siguienteNroVale(db)).toBe(`V${ANIO}-0002`); // vuelve a estar libre
-    expect(existeVale(db, `V${ANIO}-0002`)).toBe(false); // y de verdad lo está
+    expect(siguienteNroVale(db)).toBe(`E${ANIO}-0002`); // vuelve a estar libre
+    expect(existeVale(db, `E${ANIO}-0002`)).toBe(false); // y de verdad lo está
     expect(v1).toBeGreaterThan(0);
   });
 
@@ -113,7 +125,7 @@ describe('numeracion de vales (MAX, no COUNT)', () => {
     const vale = db.prepare('SELECT nro_vale FROM salidas WHERE id=?').get(id) as {
       nro_vale: string;
     };
-    expect(vale.nro_vale).toBe(`V${ANIO}-0001`);
+    expect(vale.nro_vale).toBe(`E${ANIO}-0001`);
     expect(existeVale(db, vale.nro_vale)).toBe(true);
     expect(existeVale(db, vale.nro_vale.toLowerCase())).toBe(true); // se normaliza al comparar
   });

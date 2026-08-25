@@ -182,7 +182,7 @@ describe('salida a sucursal', () => {
     // recibe el número: lo asigna solo.
     const cab = cabeceraSalida(db, listarSalidas(db)[0]!.id)!;
     expect(cab.nro_vale).toBe(v1);
-    expect(cab.nro_vale).toMatch(/^V\d{4}-\d{4}$/);
+    expect(cab.nro_vale).toMatch(/^E\d{4}-\d{4}$/);
   });
 
   it('stock tras salida lapiceros = 70', () => {

@@ -254,6 +254,58 @@ El detalle completo, con lo que se revisó y lo que queda abierto, está en
 
 ---
 
+## 10. Las salidas pasan a llamarse EGRESOS, y el vale lleva la letra `E`
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.1) |
+| **Aprobado** | Sí, pedido explícito |
+
+Todo lo que la persona lee dice ahora **egreso**: el menú, el título de la
+pantalla, los botones, la tarjeta del panel, el kardex y los dos tickets
+(«EGRESO DE ALMACEN» y «VALE DE EGRESO»).
+
+El correlativo del vale pasa de `V{año}-0000` a **`E{año}-0000`**, para que
+haga juego con la `I` de los ingresos.
+
+**Lo que NO cambió, y es a propósito:**
+
+- **La base de datos.** Las tablas siguen llamándose `salidas` / `salida_det`
+  y las funciones, `registrarSalida()`. Renombrarlas no le cambia nada a quien
+  usa el almacén y obligaría a migrar la base entera.
+- **Los vales ya emitidos.** Los que empiezan con `V` se quedan como están: son
+  documentos que ya se imprimieron y se firmaron.
+- **El correlativo NO vuelve a empezar en 0001.** `siguienteNroVale()` mira
+  los dos prefijos del año, así que si el último fue `V2026-0057`, el siguiente
+  es `E2026-0058`.
+- **El orden del kardex.** Antes salía del alfabeto (AJUSTE < INGRESO <
+  SALIDA). Con «EGRESO» el alfabeto habría adelantado los egresos a los
+  ingresos del mismo día y el saldo se leería en negativo, así que el orden
+  ahora es explícito en el SQL.
+
+---
+
+## 11. Al imprimir ya no se le pide a la impresora una hoja a medida
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.1) |
+| **Aprobado** | Sí, corrección de un defecto |
+
+La versión Qt le pedía a Windows una hoja del alto exacto del vale y dibujaba
+desde el borde de arriba. Chromium hace lo mismo, pero si el controlador
+**ignora** esa medida —que es lo normal— centra el ticket en el papel que el
+controlador sí tiene, y queda media hoja en blanco arriba. Ver la trampa 25.
+
+Ahora el ticket se manda sin pedir medida: la hoja es la del controlador y el
+vale empieza arriba de todo. Queda la casilla **«Cortar el papel justo donde
+termina el vale»** en la ventana de imprimir, apagada de fábrica, para los
+rollos cuyo controlador sí acepta el alto a medida.
+
+El PDF no cambió: ahí la medida la pone Chromium y siempre salió bien.
+
+---
+
 ## Decisiones técnicas que no son cambios de negocio
 
 Van acá para que quede el motivo, pero no alteran lo que hace la app.

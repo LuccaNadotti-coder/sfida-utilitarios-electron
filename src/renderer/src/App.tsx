@@ -42,7 +42,7 @@ const MENU: Array<{
   { clave: 'panel', menu: 'Panel', titulo: 'Panel de control', subtitulo: 'Resumen del almacén al día de hoy', icono: 'panel' },
   { clave: 'stock', menu: 'Artículos y stock', titulo: 'Artículos y stock', subtitulo: 'Todo lo que hay en el almacén, qué comprar y el conteo físico', icono: 'caja' },
   { clave: 'ingresos', menu: 'Ingresos (boletas)', titulo: 'Ingresos por boleta', subtitulo: 'Mercadería que entra al almacén', icono: 'entrada' },
-  { clave: 'salidas', menu: 'Salidas a sucursal', titulo: 'Salidas a sucursal', subtitulo: 'Reparto de mercadería a los locales', icono: 'salida' },
+  { clave: 'salidas', menu: 'Egresos a sucursal', titulo: 'Egresos a sucursal', subtitulo: 'Reparto de mercadería a los locales', icono: 'salida' },
   { clave: 'sucursales', menu: 'Sucursales', titulo: 'Sucursales', subtitulo: 'Locales a los que se reparte la mercadería', icono: 'tienda' },
   { clave: 'reportes', menu: 'Reportes', titulo: 'Reportes', subtitulo: 'Valor del almacén, inversión por tienda, kardex y precios', icono: 'reporte' },
   { clave: 'maestro', menu: 'Control Maestro', titulo: 'Control Maestro', subtitulo: 'Sección restringida: solo con contraseña', icono: 'candado' },

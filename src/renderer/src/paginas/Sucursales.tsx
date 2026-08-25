@@ -68,7 +68,7 @@ export function PaginaSucursales(): React.JSX.Element {
         seleccionada={sel}
         alSeleccionar={(s) => setSel(s.id)}
         alDobleClic={(s) => setEditando(s.id)}
-        vacio={{ titulo: 'Todavía no hay sucursales', detalle: 'Cargá la primera con «Nueva sucursal». Sin sucursales no se pueden registrar salidas.' }}
+        vacio={{ titulo: 'Todavía no hay sucursales', detalle: 'Cargá la primera con «Nueva sucursal». Sin sucursales no se pueden registrar egresos.' }}
         sinResultados={texto ? { titulo: 'Ninguna sucursal coincide', detalle: 'Probá con otro código, nombre o responsable.' } : undefined}
       />
 

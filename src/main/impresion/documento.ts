@@ -22,6 +22,16 @@ export interface OpcionesDocumento {
   /** HTML del A4, o `null` si es ticket. */
   htmlA4: string | null;
   modoMargen: ModoMargen;
+  /**
+   * Si el `@page` declara el tamaño de la hoja.
+   *
+   * Va en `false` cuando el vale se manda a una impresora sin pedirle una
+   * medida (ver TRAMPA 9 en `imprimir.ts`): ahí la hoja la pone el
+   * controlador, y una medida distinta declarada en el CSS es justamente lo
+   * que hace que Chromium centre el ticket y deje media hoja en blanco
+   * arriba. Sin `size`, el vale empieza en el borde de arriba del papel.
+   */
+  declararTamano?: boolean;
 }
 
 function esc(s: string): string {
@@ -35,16 +45,17 @@ function esc(s: string): string {
  * cuánto mide la hoja antes de imprimir.
  */
 export function documentoVale(op: OpcionesDocumento): string {
-  const { anchoMm, texto, htmlA4, modoMargen } = op;
+  const { anchoMm, texto, htmlA4, modoMargen, declararTamano = true } = op;
   const cols = COLUMNAS[anchoMm] ?? 42;
   const margenMm = margen(anchoMm);
   const utilMm = anchoMm - margenMm * 2;
   const esA4 = anchoMm >= 200;
 
+  const tamano = declararTamano ? `size: ${anchoMm}mm auto; ` : '';
   const reglaPagina =
     modoMargen === 'css'
-      ? `@page { size: ${anchoMm}mm auto; margin: ${margenMm}mm; }`
-      : `@page { size: ${anchoMm}mm auto; margin: 0; }`;
+      ? `@page { ${tamano}margin: ${margenMm}mm; }`
+      : `@page { ${tamano}margin: 0; }`;
   const relleno = modoMargen === 'css' ? '0' : `${margenMm}mm`;
 
   const cuerpo = esA4

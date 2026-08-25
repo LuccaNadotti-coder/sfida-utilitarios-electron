@@ -93,7 +93,7 @@ export function DlgBusquedaGlobal({
           icono: 'salida',
           color: '#2f6fed',
           titulo: `Vale ${s.nro_vale}`,
-          detalle: `Salida · ${s.sucursal} · ${dmy(s.fecha)}`,
+          detalle: `Egreso · ${s.sucursal} · ${dmy(s.fecha)}`,
           destino: 'salidas',
           extra: { tipo: 'seleccionar', id: s.id },
         });

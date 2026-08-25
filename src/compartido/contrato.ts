@@ -318,6 +318,15 @@ export interface OpcionesImpresion {
   anchoMm: AnchoPapel;
   deviceName?: string;
   copias?: number;
+  /**
+   * Pedirle a la impresora una hoja del alto exacto del vale.
+   *
+   * De fábrica va APAGADO: la mayoría de los controladores ignoran el alto a
+   * medida y entonces Chromium centra el ticket en el papel que ellos traen,
+   * dejando media hoja en blanco arriba. Solo sirve encenderlo en rollos que
+   * de verdad aceptan la medida y cortan justo. Ver TRAMPA 9.
+   */
+  ajustarAlto?: boolean;
 }
 
 export interface Impresora {
@@ -474,7 +483,9 @@ export interface ApiSfida {
   };
   impresion: {
     impresoras(): Promise<Respuesta<Impresora[]>>;
-    preferencias(): Promise<Respuesta<{ impresora: string; papel: AnchoPapel }>>;
+    preferencias(): Promise<
+      Respuesta<{ impresora: string; papel: AnchoPapel; ajustarAlto: boolean }>
+    >;
     vistaPrevia(
       tipo: TipoComprobante,
       id: number,

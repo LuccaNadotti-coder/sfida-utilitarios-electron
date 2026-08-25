@@ -20,8 +20,10 @@ export interface MovimientoKardex {
  * Port de `kardex()`.
  *
  * DOS COSAS NO OBVIAS:
- *  - Ordena por `fecha, tipo` ALFABÉTICO: dentro de un mismo día, AJUSTE va
- *    antes que INGRESO y este antes que SALIDA.
+ *  - Dentro de un mismo día, AJUSTE va antes que INGRESO y este antes que
+ *    EGRESO. El orden NO puede salir del alfabeto: al pasar de «SALIDA» a
+ *    «EGRESO» los egresos se habrían adelantado a los ingresos y el saldo del
+ *    día se leería en negativo. Por eso va un orden explícito.
  *  - El saldo se acumula sobre TODOS los movimientos y recién después se
  *    filtra por fecha, así el saldo arrastrado de la primera fila del período
  *    es el correcto.
@@ -34,23 +36,28 @@ export function kardex(
 ): MovimientoKardex[] {
   const filas = db
     .prepare(
-      `SELECT i.fecha AS fecha, 'INGRESO' AS tipo,
-              i.tipo_doc || ' ' || i.nro_documento AS documento,
-              COALESCE(i.proveedor,'') AS referencia,
-              d.cantidad AS entrada, 0 AS salida
-       FROM ingreso_det d JOIN ingresos i ON i.id=d.ingreso_id
-       WHERE d.articulo_id=?
-       UNION ALL
-       SELECT s.fecha, 'SALIDA', 'VALE ' || s.nro_vale, su.nombre, 0, d.cantidad
-       FROM salida_det d JOIN salidas s ON s.id=d.salida_id
-            JOIN sucursales su ON su.id=s.sucursal_id
-       WHERE d.articulo_id=?
-       UNION ALL
-       SELECT j.fecha, 'AJUSTE', 'AJUSTE', COALESCE(j.motivo,''),
-              CASE WHEN j.cantidad>0 THEN j.cantidad ELSE 0 END,
-              CASE WHEN j.cantidad<0 THEN -j.cantidad ELSE 0 END
-       FROM ajustes j WHERE j.articulo_id=?
-       ORDER BY fecha, tipo`,
+      // La unión va dentro de un SELECT envolvente porque el ORDER BY de un
+      // compuesto solo acepta columnas del resultado, no una expresión.
+      `SELECT * FROM (
+         SELECT i.fecha AS fecha, 'INGRESO' AS tipo,
+                i.tipo_doc || ' ' || i.nro_documento AS documento,
+                COALESCE(i.proveedor,'') AS referencia,
+                d.cantidad AS entrada, 0 AS salida
+         FROM ingreso_det d JOIN ingresos i ON i.id=d.ingreso_id
+         WHERE d.articulo_id=?
+         UNION ALL
+         SELECT s.fecha, 'EGRESO', 'VALE ' || s.nro_vale, su.nombre, 0, d.cantidad
+         FROM salida_det d JOIN salidas s ON s.id=d.salida_id
+              JOIN sucursales su ON su.id=s.sucursal_id
+         WHERE d.articulo_id=?
+         UNION ALL
+         SELECT j.fecha, 'AJUSTE', 'AJUSTE', COALESCE(j.motivo,''),
+                CASE WHEN j.cantidad>0 THEN j.cantidad ELSE 0 END,
+                CASE WHEN j.cantidad<0 THEN -j.cantidad ELSE 0 END
+         FROM ajustes j WHERE j.articulo_id=?
+       )
+       ORDER BY fecha,
+                CASE tipo WHEN 'AJUSTE' THEN 0 WHEN 'INGRESO' THEN 1 ELSE 2 END`,
     )
     .all(articuloId, articuloId, articuloId) as Array<{
     fecha: string;

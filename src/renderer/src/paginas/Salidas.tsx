@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
- * Salidas a sucursal.
+ * Egresos a sucursal (en el codigo siguen llamandose salidas).
  *
  * CAMBIOS DE LA v5:
  *   - El N° de vale lo genera el sistema y YA NO es editable.
@@ -216,7 +216,7 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
 
   return (
     <div className="flex flex-col gap-4 p-5">
-      <Caja titulo="Vale de salida">
+      <Caja titulo="Vale de egreso">
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <div>
             <Etiqueta>N° de vale</Etiqueta>
@@ -323,7 +323,7 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
             Imprimir el vale al guardar
           </label>
           <Boton tono="gris" onClick={limpiar}>Limpiar</Boton>
-          <Boton tono="verde" onClick={guardar} disabled={lineas.length === 0}>Guardar salida</Boton>
+          <Boton tono="verde" onClick={guardar} disabled={lineas.length === 0}>Guardar egreso</Boton>
         </div>
       </Caja>
 
@@ -343,7 +343,7 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
             />
             <Boton tono="claro" onClick={() => (sel ? setViendo(sel) : avisar('Seleccione un vale del historial.', 'info'))}>Ver detalle</Boton>
             <Boton tono="azul" onClick={() => (sel ? setImprimiendo(sel) : avisar('Seleccione el vale que desea imprimir.', 'info'))}>Imprimir vale</Boton>
-            <Boton tono="rojo" onClick={() => (sel ? setPidiendoClave(true) : avisar('Seleccione el vale que desea anular.', 'info'))}>Anular salida</Boton>
+            <Boton tono="rojo" onClick={() => (sel ? setPidiendoClave(true) : avisar('Seleccione el vale que desea anular.', 'info'))}>Anular egreso</Boton>
           </div>
         }
       >
@@ -381,7 +381,7 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
       />
       <DlgClave
         abierto={pidiendoClave}
-        motivo="anular un vale de salida"
+        motivo="anular un vale de egreso"
         alCerrar={async (autorizado) => {
           setPidiendoClave(false);
           if (!autorizado || !sel) return;

@@ -27,7 +27,7 @@ function vale(det: Array<Partial<DetalleSalida>>, cab: Partial<CabeceraSalida> =
   return {
     cab: {
       id: 1,
-      nro_vale: 'V2026-0042',
+      nro_vale: 'E2026-0042',
       fecha: '2026-08-21',
       sucursal_id: 1,
       entregado_por: 'CARLOS RAMIREZ',
@@ -158,12 +158,12 @@ describe('firmas', () => {
 describe('contenido del vale', () => {
   it('lleva membrete, numero de vale y las dos firmas', () => {
     const t = textoTicket(vale(DETALLE_TIPICO), 80);
-    // v5: el título es «SALIDA DE ALMACEN», sin la palabra «VALE».
-    expect(t).toContain('SALIDA DE ALMACEN');
-    expect(t).not.toContain('VALE DE SALIDA DE ALMACEN');
+    // v5: el título es «EGRESO DE ALMACEN», sin la palabra «VALE».
+    expect(t).toContain('EGRESO DE ALMACEN');
+    expect(t).not.toContain('VALE DE EGRESO DE ALMACEN');
     expect(t).toContain('SFIDA');
     expect(t).toContain('RUC 20512345678');
-    expect(t).toContain('V2026-0042');
+    expect(t).toContain('E2026-0042');
     expect(t).toContain('ENTREGUE CONFORME');
     expect(t).toContain('RECIBI CONFORME');
   });
@@ -227,7 +227,7 @@ describe('version A4', () => {
     const h = htmlA4(vale(DETALLE_TIPICO));
     expect(h).toContain('<table');
     expect(h).toContain('Recib');
-    expect(h).toContain('VALE DE SALIDA');
+    expect(h).toContain('VALE DE EGRESO');
   });
 
   it('escapa el HTML de los nombres', () => {

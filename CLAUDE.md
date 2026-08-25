@@ -17,7 +17,7 @@ Es la reescritura en Electron de la versión Python + PySide6 que está en
 ```bash
 npm install                  # verifica que better-sqlite3 cargue en Electron
 npm run dev                  # la app, con recarga en caliente
-npm test                     # 241 pruebas de lógica, sin abrir ninguna ventana
+npm test                     # 255 pruebas de lógica, sin abrir ninguna ventana
 npm run typecheck            # TypeScript en los tres procesos
 npm run demo                 # crea datos/sfida_demo.db con datos de ejemplo
 npm run capturas             # capturas de las 7 pantallas en 1366×768 y 1920×1080
@@ -228,7 +228,9 @@ respuesta honesta, el ticket cae en la unidad de stock, que nunca miente.
   (`proveedor` + `nro_proveedor`). Un número de proveedor vacío se deja pasar:
   hay compras sin comprobante.
 - **El N° interno del ingreso y el del vale los genera el sistema** y no se
-  pueden editar (`siguienteNroIngreso()`, `siguienteNroVale()`).
+  pueden editar (`siguienteNroIngreso()` → `I{año}-0000`, `siguienteNroVale()`
+  → `E{año}-0000`). Los vales viejos con prefijo `V` se siguen mirando para
+  que el correlativo no vuelva a empezar en 0001.
 - **`registrarSalida()` agrupa las líneas repetidas del mismo artículo ANTES de
   validar el stock**, y guarda una sola línea por artículo.
 - El orden de validación de `registrarSalida()` importa para los mensajes:
@@ -251,7 +253,9 @@ respuesta honesta, el ticket cae en la unidad de stock, que nunca miente.
 - **`historialPrecios()` calcula las variaciones sobre TODAS las compras y
   recién después filtra por período.**
 - **`kardex()` acumula el saldo sobre todo el histórico y después filtra**, y
-  ordena por `fecha, tipo` alfabético (AJUSTE < INGRESO < SALIDA).
+  ordena por `fecha` y después AJUSTE, INGRESO, EGRESO. Ese orden está
+  **escrito en el SQL**, no sale del alfabeto: con «EGRESO» el alfabeto pondría
+  los egresos antes que los ingresos del mismo día y el saldo daría negativo.
 
 ### Dos búsquedas distintas, a propósito
 
@@ -290,6 +294,12 @@ ventana de la aplicación, saldrían los botones y el menú en el papel.
    en 74 mm, y cada PC tiene fuentes distintas.
 8. **El alto de la hoja cambia entre versiones de Electron** (0,2 mm de la 32 a
    la 43). Nunca fijarlo como constante.
+9. **A la impresora NO se le pide una hoja a medida.** Casi ningún controlador
+   respeta el alto a medida, y cuando lo ignora Chromium **centra** el ticket
+   en el papel que el controlador sí tiene: media hoja en blanco arriba y otra
+   abajo. Sin `pageSize` (y sin `@page { size }`) la hoja es la del
+   controlador y el vale empieza arriba de todo. La casilla «Cortar el papel
+   justo donde termina el vale» vuelve al modo anterior. Ver la trampa 25.
 
 ### Cuentas de columnas
 
@@ -430,7 +440,7 @@ decisión.
 
 ## El registro de trampas
 
-`TRAMPAS.md` tiene 24 entradas, cada una con **cómo se detectó**. Esa parte
+`TRAMPAS.md` tiene 25 entradas, cada una con **cómo se detectó**. Esa parte
 suele ser más útil que la solución. Si encontrás algo que falló de una forma
 que no se parecía al problema real, o que funcionó dando un resultado falso,
 sumalo ahí.

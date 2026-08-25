@@ -615,7 +615,7 @@ function TabDatos(): React.JSX.Element {
 
         <Caja titulo="Zona de riesgo">
           <div className="rounded-lg bg-coral-clr px-3.5 py-2.5 text-[13px] font-semibold text-[#b3282c]">
-            Borrar todos los movimientos elimina ingresos, salidas y ajustes. Los artículos y
+            Borrar todos los movimientos elimina ingresos, egresos y ajustes. Los artículos y
             sucursales se conservan. Úselo solo si terminó las pruebas y va a empezar con datos
             reales.
           </div>

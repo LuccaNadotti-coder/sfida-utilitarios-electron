@@ -139,22 +139,31 @@ export function siguienteNroIngreso(db: Database, fecha: Date = new Date()): str
   return siguienteCorrelativo(db, 'ingresos', 'nro_documento', 'I', fecha);
 }
 
+/**
+ * `letrasViejas` son prefijos que YA NO se usan pero que hay que seguir
+ * mirando: si el correlativo los ignorara, al cambiar la letra el año
+ * arrancaría otra vez en 0001 y quedarían dos numeraciones conviviendo.
+ */
 function siguienteCorrelativo(
   db: Database,
   tabla: string,
   columna: string,
   letra: string,
   fecha: Date,
+  letrasViejas: string[] = [],
 ): string {
   const anio = fecha.getFullYear();
   const prefijo = `${letra}${anio}-`;
-  const filas = db
-    .prepare(`SELECT ${columna} AS n FROM ${tabla} WHERE ${columna} LIKE ?`)
-    .all(`${prefijo}%`) as Array<{ n: string }>;
   let max = 0;
-  for (const f of filas) {
-    const sufijo = String(f.n).slice(prefijo.length);
-    if (/^\d+$/.test(sufijo)) max = Math.max(max, Number(sufijo));
+  for (const l of [letra, ...letrasViejas]) {
+    const p = `${l}${anio}-`;
+    const filas = db
+      .prepare(`SELECT ${columna} AS n FROM ${tabla} WHERE ${columna} LIKE ?`)
+      .all(`${p}%`) as Array<{ n: string }>;
+    for (const f of filas) {
+      const sufijo = String(f.n).slice(p.length);
+      if (/^\d+$/.test(sufijo)) max = Math.max(max, Number(sufijo));
+    }
   }
   return `${prefijo}${String(max + 1).padStart(4, '0')}`;
 }
@@ -323,9 +332,15 @@ export interface DetalleSalida {
   unidad: string;
 }
 
-/** Siguiente número de vale: `V{año}-{0000}`, con el MÁXIMO sufijo del año. */
+/**
+ * Siguiente número de vale de EGRESO: `E{año}-{0000}`, con el MÁXIMO sufijo
+ * del año. La letra hace juego con la `I` de los ingresos.
+ *
+ * Hasta la v5.0.1 la letra era `V`. Los vales viejos se siguen mirando para
+ * que el correlativo NO vuelva a empezar en 0001 el año del cambio.
+ */
 export function siguienteNroVale(db: Database, fecha: Date = new Date()): string {
-  return siguienteCorrelativo(db, 'salidas', 'nro_vale', 'V', fecha);
+  return siguienteCorrelativo(db, 'salidas', 'nro_vale', 'E', fecha, ['V']);
 }
 
 export function existeVale(db: Database, nroVale: unknown): boolean {
@@ -419,7 +434,7 @@ export function registrarSalida(db: Database, d: DatosSalida): number {
   const suc = db.prepare('SELECT nombre FROM sucursales WHERE id=?').get(d.sucursalId) as
     | { nombre: string }
     | undefined;
-  auditar(db, 'SALIDA', `Vale ${vale} a ${suc?.nombre ?? '?'} (${pedido.size} articulos)`);
+  auditar(db, 'EGRESO', `Vale ${vale} a ${suc?.nombre ?? '?'} (${pedido.size} articulos)`);
   return salId;
 }
 
@@ -478,7 +493,7 @@ export function cabeceraSalida(db: Database, salidaId: number): CabeceraSalida |
 export function eliminarSalida(db: Database, salidaId: number): void {
   const cab = cabeceraSalida(db, salidaId);
   db.prepare('DELETE FROM salidas WHERE id=?').run(salidaId);
-  if (cab) auditar(db, 'ANULA SALIDA', `Vale ${cab.nro_vale} de ${cab.sucursal}`);
+  if (cab) auditar(db, 'ANULA EGRESO', `Vale ${cab.nro_vale} de ${cab.sucursal}`);
 }
 
 /* ------------------------------------------------------------------ ajustes */

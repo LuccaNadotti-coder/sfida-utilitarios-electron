@@ -252,6 +252,42 @@ De paso aparecieron dos problemas del mismo origen:
 
 ---
 
+## v5.1
+
+### 25. Pedirle a la impresora una hoja a medida deja el ticket CENTRADO, con media hoja en blanco arriba
+
+**Qué pasó.** El vale salía impreso con un espacio en blanco enorme arriba,
+casi tan alto como el propio ticket. En PDF salía perfecto. En la versión
+Python **también** salía bien, así que no era el armado del ticket.
+
+**Cómo se detectó.** Por la diferencia entre los dos caminos, que en el código
+solo se separan en una línea: `printToPDF()` recibe el alto medido y lo usa tal
+cual; `print()` se lo pide al **controlador de Windows**. Y por la proporción
+del blanco: no era un margen fijo, era casi la mitad de lo que sobraba de
+papel. Eso no es un margen, es un centrado.
+
+Chromium manda la hoja a medida en el DEVMODE (`dmPaperWidth` /
+`dmPaperLength`) **sin apagar la bandera `dmPaperSize`**, y con esa bandera
+puesta casi ningún controlador mira el alto a medida: se queda con el papel que
+tiene configurado. Entonces la hoja que armó Chromium (80 × 158 mm) es más
+chica que el papel real (una A4, o el rollo de 297 mm) y Chromium **la centra**:
+quedan dos franjas iguales, una arriba y otra abajo. Qt no lo hacía: dibujaba
+el documento desde el borde de arriba, midiera lo que midiera la hoja.
+
+**Por qué importa.** Es medio metro de papel por vale, y el ticket sale a la
+mitad del rollo. Además el síntoma apunta al lugar equivocado: parece un
+margen mal puesto, y los márgenes ya estaban en cero.
+
+**Qué se hizo.** `imprimirVale()` **no le pide ninguna medida a la impresora**
+(y el documento tampoco declara `@page { size }`, que dispara el mismo
+centrado desde el CSS). Así la hoja es la del controlador, no hay nada que
+centrar y el vale empieza en el borde de arriba. Para los rollos cuyo
+controlador sí acepta el alto a medida y corta justo, queda la casilla
+«Cortar el papel justo donde termina el vale» en la ventana de imprimir,
+apagada de fábrica.
+
+---
+
 ## Cómo agregar una trampa acá
 
 1. **Qué pasó** — el síntoma, tal como se vio.

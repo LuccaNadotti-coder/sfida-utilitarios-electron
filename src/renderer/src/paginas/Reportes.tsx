@@ -163,7 +163,7 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
     } else if (pestana === 'kardex') {
       if (!artKardex) return avisar('Elija primero un artículo.', 'info');
       nombre = `kardex_${nombreArt(artKardex)}`;
-      cabeceras = ['Fecha', 'Tipo', 'Documento', 'Destino / proveedor', 'Entrada', 'Salida', 'Saldo'];
+      cabeceras = ['Fecha', 'Tipo', 'Documento', 'Destino / proveedor', 'Ingreso', 'Egreso', 'Saldo'];
       filas = kardex.map((m) => [m.fecha, m.tipo, m.documento, m.referencia, fmtNum(m.entrada), fmtNum(m.salida), fmtNum(m.saldo)]);
     } else if (pestana === 'ranking') {
       nombre = 'articulos_mas_usados';
@@ -360,8 +360,8 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
               { clave: 'tipo', titulo: 'Tipo', ancho: '100px', render: (m) => m.tipo.charAt(0) + m.tipo.slice(1).toLowerCase() },
               { clave: 'doc', titulo: 'Documento', ancho: '175px', render: (m) => m.documento },
               { clave: 'ref', titulo: 'Destino / proveedor', render: (m) => m.referencia },
-              { clave: 'ent', titulo: 'Entrada', ancho: '95px', derecha: true, render: (m) => (m.entrada ? <span className="font-semibold text-verde">{fmtNum(m.entrada)}</span> : '') },
-              { clave: 'sal', titulo: 'Salida', ancho: '95px', derecha: true, render: (m) => (m.salida ? <span className="font-semibold text-coral">{fmtNum(m.salida)}</span> : '') },
+              { clave: 'ent', titulo: 'Ingreso', ancho: '95px', derecha: true, render: (m) => (m.entrada ? <span className="font-semibold text-verde">{fmtNum(m.entrada)}</span> : '') },
+              { clave: 'sal', titulo: 'Egreso', ancho: '95px', derecha: true, render: (m) => (m.salida ? <span className="font-semibold text-coral">{fmtNum(m.salida)}</span> : '') },
               { clave: 'saldo', titulo: 'Saldo', ancho: '100px', derecha: true, render: (m) => <span className="font-semibold">{fmtNum(m.saldo)}</span> },
             ]}
             filas={kardex}

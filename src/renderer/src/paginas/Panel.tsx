@@ -28,7 +28,7 @@ const AZUL = '#2f6fed';
 interface Movimiento {
   id: string;
   fecha: string;
-  tipo: 'Ingreso' | 'Salida';
+  tipo: 'Ingreso' | 'Egreso';
   documento: string;
   detalle: string;
   unidades: number;
@@ -75,7 +75,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
         ...(sal ?? []).slice(0, 12).map((s) => ({
           id: `s${s.id}`,
           fecha: s.fecha,
-          tipo: 'Salida' as const,
+          tipo: 'Egreso' as const,
           documento: `Vale ${s.nro_vale}`,
           detalle: s.sucursal,
           unidades: s.unidades,
@@ -96,7 +96,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
         <Tarjeta orden={0} titulo="Artículos" valor={resumen?.articulos ?? '—'} pie="activos en el almacén" color={AZUL} icono={<Icono nombre="caja" tam={15} />} />
         <Tarjeta orden={1} titulo="Sucursales" valor={resumen?.sucursales ?? '—'} pie="locales atendidos" color="#5a8df3" icono={<Icono nombre="tienda" tam={15} />} />
         <Tarjeta orden={2} titulo="Ingresos" valor={resumen?.ingresos ?? '—'} pie="boletas registradas" color={VERDE} icono={<Icono nombre="entrada" tam={15} />} />
-        <Tarjeta orden={3} titulo="Salidas" valor={resumen?.salidas ?? '—'} pie="vales de reparto" color={AZUL} icono={<Icono nombre="salida" tam={15} />} />
+        <Tarjeta orden={3} titulo="Egresos" valor={resumen?.salidas ?? '—'} pie="vales de reparto" color={AZUL} icono={<Icono nombre="salida" tam={15} />} />
         <Tarjeta
           orden={4}
           titulo="Alertas"
@@ -143,7 +143,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
         titulo="Últimos movimientos"
         acciones={
           <button onClick={() => irA('salidas')} className="cursor-pointer text-[12px] font-semibold text-azul hover:underline">
-            Ver salidas
+            Ver egresos
           </button>
         }
       >
@@ -158,7 +158,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
           filas={movs}
           clave={(m) => m.id}
           cargando={cargando}
-          vacio={{ titulo: 'Todavía no hay movimientos', detalle: 'Registrá un ingreso o una salida para verlos acá.' }}
+          vacio={{ titulo: 'Todavía no hay movimientos', detalle: 'Registrá un ingreso o un egreso para verlos acá.' }}
         />
       </Caja>
     </div>
@@ -267,8 +267,8 @@ function Barras({ datos }: { datos: EstadisticaMes[] }): React.JSX.Element {
         ))}
       </div>
       <div className="mt-2 flex gap-4 text-[12px] text-suave">
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm" style={{ background: VERDE }} />Entradas</span>
-        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm" style={{ background: AZUL }} />Salidas</span>
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm" style={{ background: VERDE }} />Ingresos</span>
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-sm" style={{ background: AZUL }} />Egresos</span>
       </div>
     </div>
   );

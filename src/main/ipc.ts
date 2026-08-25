@@ -464,6 +464,7 @@ export function registrarIpc(ctx: ContextoIpc): void {
   manejar(CANALES.impPreferencias, () => ({
     impresora: getConfig(db, 'impresora_vales', '') ?? '',
     papel: Number(getConfig(db, 'papel_vales', '80') ?? 80) as AnchoPapel,
+    ajustarAlto: (getConfig(db, 'ajustar_alto_papel', '0') ?? '0') === '1',
   }));
 
   function membrete(): { empresa: string; empresaDir: string; empresaRuc: string; impresoEl: string } {
@@ -513,10 +514,11 @@ export function registrarIpc(ctx: ContextoIpc): void {
   manejar(CANALES.impImprimir, async (o: OpcionesImpresion) => {
     if (!o.deviceName) throw new ErrorNegocio('Elija una impresora.');
     const c = comprobante(o.tipo, o.id);
-    const r = await imprimirVale(c, o.anchoMm, o.deviceName, o.copias ?? 2);
+    const r = await imprimirVale(c, o.anchoMm, o.deviceName, o.copias ?? 2, o.ajustarAlto ?? false);
     if (r.ok) {
       setConfig(db, 'impresora_vales', o.deviceName);
       setConfig(db, 'papel_vales', o.anchoMm);
+      setConfig(db, 'ajustar_alto_papel', o.ajustarAlto ? '1' : '0');
       const nro = c.tipo === 'salida' ? c.datos.cab.nro_vale : c.datos.nroDocumento;
       auditar(db, 'IMPRESION', `${nro} en ${o.deviceName} (${o.copias ?? 2} copias)`);
     }
