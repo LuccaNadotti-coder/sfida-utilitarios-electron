@@ -309,8 +309,45 @@ el error es silencioso: en pantalla se ve perfecto y nada avisa.
 
 **Qué se hizo.** `margen()` pasó de 3 mm a **5.5 mm** en 80 mm y **4.5 mm** en
 58 mm. No se toca el tamaño de la letra a mano: al achicarse el ancho útil, el
-ajuste automático de `documento.ts` la recalcula solo. El vale además queda
-centrado en el rollo, que es como se veía en el diseño viejo.
+ajuste automático de `documento.ts` la recalcula solo.
+
+---
+
+### 27. El margen de los costados NO se pone con relleno: se pone centrando
+
+**Qué pasó.** Apenas se agrandó el margen (trampa 26), el vale dejó de
+cortarse pero salió **desparejo**: un costado con mucho más blanco que el
+otro, unas 3 a 5 letras de diferencia.
+
+**Cómo se detectó.** El relleno era simétrico —`padding: 5.5mm` a los dos
+lados— así que el papel no podía verse desparejo… salvo que la hoja no midiera
+lo que decíamos. Ahí está la clave: el documento fijaba `body { width: 80mm }`
+y el ticket arrancaba a 5.5 mm del borde IZQUIERDO de esa caja. Pero desde la
+trampa 9 **no se le pide ninguna medida a la impresora**: la hoja es la del
+controlador, y un rollo de «80 mm» suele declarar 72 a 76. Con una hoja de
+74 mm, el vale quedaba a 5.5 mm de la izquierda y a −0.5 de la derecha: 6 mm
+de diferencia, casi 4 letras. Exactamente el síntoma.
+
+Y explica también por qué antes se cortaba: con margen de 3 mm el bloque medía
+74 mm y no entraba en esa hoja.
+
+**Por qué importa.** El relleno fijo solo acierta si la hoja mide justo el
+ancho nominal, y eso no lo controla el programa. Es un error que además no se
+ve en la vista previa, donde la hoja siempre mide lo que dice el papel.
+
+**Qué se hizo.** El bloque del ticket tiene su ancho útil y se centra con
+`margin: 0 auto`; el ancho del papel solo se declara `@media screen`, para la
+vista previa y la foto. Al imprimir el body ocupa la hoja que dé el
+controlador y el vale queda centrado **en ella**, mida lo que mida.
+
+`medirMargenesLaterales()` lo comprueba de verdad en
+`npm run verificar:impresion`: emula la impresión (`media: print`) sobre hojas
+de 80, 74 y 72 mm y exige que los dos costados queden iguales. Con el código
+anterior, la de 74 mm daba 6 mm de diferencia.
+
+Para el resto —una impresora cuyo cabezal no imprima centrado— queda el ajuste
+**«Correr el vale a los costados»** en la ventana de imprimir, en milímetros y
+guardado en `config`.
 
 ---
 

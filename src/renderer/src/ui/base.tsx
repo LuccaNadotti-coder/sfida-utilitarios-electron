@@ -324,10 +324,14 @@ export function SpinNumero({
         onChange={(e) => {
           const crudo = e.target.value.replace(',', '.').trim();
           // Solo dígitos y un punto: cualquier otra tecla se ignora en vez de
-          // dejar el campo en un estado que después no se puede corregir.
-          if (crudo !== '' && !/^\d*\.?\d*$/.test(crudo)) return;
+          // dejar el campo en un estado que después no se puede corregir. El
+          // signo menos solo se acepta donde tiene sentido (min negativo).
+          const permitido = min < 0 ? /^-?\d*\.?\d*$/ : /^\d*\.?\d*$/;
+          if (crudo !== '' && !permitido.test(crudo)) return;
           setTexto(crudo);
-          const n = crudo === '' || crudo === '.' ? min : Number(crudo);
+          // Vaciar el campo vale cero, no el mínimo: si el mínimo es −10,
+          // borrar no puede significar «correlo 10 mm a la izquierda».
+          const n = crudo === '' || crudo === '.' || crudo === '-' ? acotar(0) : Number(crudo);
           if (Number.isFinite(n)) alCambiar(acotar(n));
         }}
         onBlur={() => setTexto(null)}

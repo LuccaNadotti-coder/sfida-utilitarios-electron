@@ -39,7 +39,13 @@ const clicEnPestana = (texto: string): string => `(() => {
 })()`;
 
 /** Pantallas a recorrer: clave del menú + nombre del archivo. */
-const PANTALLAS: Array<{ clave: string; archivo: string; antes?: string }> = [
+const PANTALLAS: Array<{
+  clave: string;
+  archivo: string;
+  antes?: string;
+  /** Espera extra después de `antes`, para lo que tarda en armarse. */
+  espera?: number;
+}> = [
   { clave: 'panel', archivo: '1-panel' },
   { clave: 'stock', archivo: '2-articulos-y-stock' },
   // Las dos pestañas nuevas de la v5, dentro de la misma pantalla de stock.
@@ -47,6 +53,28 @@ const PANTALLAS: Array<{ clave: string; archivo: string; antes?: string }> = [
   { clave: 'stock', archivo: '2c-conteo-fisico', antes: clicEnPestana('Conteo físico') },
   { clave: 'ingresos', archivo: '3-ingresos' },
   { clave: 'salidas', archivo: '4-salidas' },
+  // La ventana de imprimir, con el vale ya armado: es donde vive el ajuste de
+  // los costados, y el único lugar donde se puede mirar antes de gastar papel.
+  {
+    clave: 'salidas',
+    archivo: '4b-imprimir-vale',
+    espera: 2600,
+    // Los dos clics NO pueden ir en el mismo tick: el botón lee el vale
+    // seleccionado del estado de React, que todavía no se actualizó, y salta
+    // el aviso «Seleccione el vale que desea imprimir».
+    antes: `(() => {
+      const filas = [...document.querySelectorAll('tbody tr')];
+      if (!filas.length) return 'sin vales en el historial';
+      filas[0].click();
+      return new Promise((listo) => setTimeout(() => {
+        const botones = [...document.querySelectorAll('button')];
+        const imprimir = botones.find((b) => b.textContent.trim() === 'Imprimir vale');
+        if (!imprimir) return listo('sin boton de imprimir');
+        imprimir.click();
+        listo('ok');
+      }, 400));
+    })()`,
+  },
   { clave: 'sucursales', archivo: '5-sucursales' },
   // Reportes abre en el panel nuevo de valor e inversión.
   { clave: 'reportes', archivo: '6-reportes-valor-e-inversion' },
@@ -144,7 +172,7 @@ export async function correrCapturas(op: OpcionesCaptura): Promise<string[]> {
         await esperar(esperaMs);
         if (p.antes) {
           await v.webContents.executeJavaScript(p.antes);
-          await esperar(esperaMs);
+          await esperar(p.espera ?? esperaMs);
         }
 
         let hecho = false;

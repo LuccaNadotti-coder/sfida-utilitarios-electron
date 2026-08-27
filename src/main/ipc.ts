@@ -465,6 +465,7 @@ export function registrarIpc(ctx: ContextoIpc): void {
     impresora: getConfig(db, 'impresora_vales', '') ?? '',
     papel: Number(getConfig(db, 'papel_vales', '80') ?? 80) as AnchoPapel,
     ajustarAlto: (getConfig(db, 'ajustar_alto_papel', '0') ?? '0') === '1',
+    corrimientoMm: Number(getConfig(db, 'corrimiento_vale_mm', '0') ?? 0) || 0,
   }));
 
   function membrete(): { empresa: string; empresaDir: string; empresaRuc: string; impresoEl: string } {
@@ -507,18 +508,30 @@ export function registrarIpc(ctx: ContextoIpc): void {
     };
   }
 
-  manejar(CANALES.impVistaPrevia, (tipo: TipoComprobante, id: number, anchoMm: AnchoPapel) =>
-    previaVale(comprobante(tipo, id), anchoMm),
+  manejar(
+    CANALES.impVistaPrevia,
+    (tipo: TipoComprobante, id: number, anchoMm: AnchoPapel, corrimientoMm?: number) =>
+      previaVale(comprobante(tipo, id), anchoMm, Number(corrimientoMm) || 0),
   );
 
   manejar(CANALES.impImprimir, async (o: OpcionesImpresion) => {
     if (!o.deviceName) throw new ErrorNegocio('Elija una impresora.');
     const c = comprobante(o.tipo, o.id);
-    const r = await imprimirVale(c, o.anchoMm, o.deviceName, o.copias ?? 2, o.ajustarAlto ?? false);
+    const corrimiento = Number(o.corrimientoMm) || 0;
+    const r = await imprimirVale(
+      c,
+      o.anchoMm,
+      o.deviceName,
+      o.copias ?? 2,
+      o.ajustarAlto ?? false,
+      'driver',
+      corrimiento,
+    );
     if (r.ok) {
       setConfig(db, 'impresora_vales', o.deviceName);
       setConfig(db, 'papel_vales', o.anchoMm);
       setConfig(db, 'ajustar_alto_papel', o.ajustarAlto ? '1' : '0');
+      setConfig(db, 'corrimiento_vale_mm', corrimiento);
       const nro = c.tipo === 'salida' ? c.datos.cab.nro_vale : c.datos.nroDocumento;
       auditar(db, 'IMPRESION', `${nro} en ${o.deviceName} (${o.copias ?? 2} copias)`);
     }

@@ -23,6 +23,14 @@ export interface OpcionesDocumento {
   htmlA4: string | null;
   modoMargen: ModoMargen;
   /**
+   * Correr el vale a los costados, en milímetros. Negativo hacia la izquierda.
+   *
+   * Es el ajuste fino para las impresoras cuyo cabezal no imprime centrado en
+   * el papel. El centrado automático resuelve el caso normal; esto arregla el
+   * resto sin tener que adivinar desde el código.
+   */
+  corrimientoMm?: number;
+  /**
    * Si el `@page` declara el tamaño de la hoja.
    *
    * Va en `false` cuando el vale se manda a una impresora sin pedirle una
@@ -45,7 +53,7 @@ function esc(s: string): string {
  * cuánto mide la hoja antes de imprimir.
  */
 export function documentoVale(op: OpcionesDocumento): string {
-  const { anchoMm, texto, htmlA4, modoMargen, declararTamano = true } = op;
+  const { anchoMm, texto, htmlA4, modoMargen, declararTamano = true, corrimientoMm = 0 } = op;
   const cols = COLUMNAS[anchoMm] ?? 42;
   const margenMm = margen(anchoMm);
   const utilMm = anchoMm - margenMm * 2;
@@ -56,11 +64,19 @@ export function documentoVale(op: OpcionesDocumento): string {
     modoMargen === 'css'
       ? `@page { ${tamano}margin: ${margenMm}mm; }`
       : `@page { ${tamano}margin: 0; }`;
-  const relleno = modoMargen === 'css' ? '0' : `${margenMm}mm`;
+  // El margen de arriba y abajo, nada más: el de los costados ya no se pone
+  // como relleno fijo, sale del centrado (ver más abajo).
+  const rellenoVertical = modoMargen === 'css' ? '0' : `${margenMm}mm`;
+
+  // El corrimiento viaja INLINE para que también se vea en la vista previa de
+  // la pantalla, que recibe solo el `outerHTML` de este elemento.
+  const corrimiento = corrimientoMm
+    ? ` style="position:relative;left:${corrimientoMm}mm"`
+    : '';
 
   const cuerpo = esA4
-    ? `<div id="hoja">${htmlA4 ?? ''}</div>`
-    : `<pre id="hoja">${esc(texto ?? '')}</pre>`;
+    ? `<div id="hoja"${corrimiento}>${htmlA4 ?? ''}</div>`
+    : `<pre id="hoja"${corrimiento}>${esc(texto ?? '')}</pre>`;
 
   return `<!DOCTYPE html>
 <html lang="es">
@@ -72,10 +88,25 @@ export function documentoVale(op: OpcionesDocumento): string {
 <style>
   ${reglaPagina}
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { padding: ${relleno}; width: ${utilMm}mm; }
+  /* Solo arriba y abajo: a los costados el aire lo pone el centrado. */
+  body { padding: ${rellenoVertical} 0; }
+  /*
+   * EN PANTALLA el papel se simula con su ancho nominal, para que la foto de
+   * verificación y la vista previa se parezcan al papel de verdad.
+   *
+   * AL IMPRIMIR no se fija ningún ancho: el body ocupa la hoja que dé el
+   * controlador y el vale se centra en ELLA. Esto es lo que arregla el ticket
+   * desparejo: el ancho de la hoja del controlador no siempre es el nominal
+   * (un rollo de «80 mm» suele declarar 72 a 76), y con un relleno fijo de
+   * 5.5 mm a la izquierda el ticket quedaba pegado a un costado, con todo el
+   * sobrante del otro lado. Centrado, la diferencia se reparte sola.
+   */
+  @media screen { body { width: ${anchoMm}mm; } }
   #hoja {
     color: #000;
-    margin: 0;
+    width: ${utilMm}mm;
+    max-width: 100%;
+    margin: 0 auto;
     ${
       esA4
         ? "font-family: Arial, Helvetica, sans-serif; font-size: 10pt;"

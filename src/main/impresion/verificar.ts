@@ -28,7 +28,7 @@ import {
   listarIngresos,
   listarSalidas,
 } from '../nucleo/movimientos';
-import { capturarVale, pdfVale, vistaPrevia } from './imprimir';
+import { capturarVale, medirMargenesLaterales, pdfVale, vistaPrevia } from './imprimir';
 import {
   COLUMNAS,
   textoTicket,
@@ -138,6 +138,32 @@ export async function verificarImpresion(db: Database): Promise<void> {
     'el alto de la hoja depende del contenido',
     altos.length === 2 && Math.abs(altos[0]! - altos[1]!) > 0.5,
     `80mm=${altos[0]?.toFixed(1)} 58mm=${altos[1]?.toFixed(1)}`,
+  );
+
+  /* --------------------------- el centrado en el papel -------------------- */
+  //
+  // Se mide emulando la impresión sobre hojas de distinto ancho. La del medio
+  // es la que importa: muchos controladores de rollos de 80 mm declaran una
+  // hoja más angosta, y ahí es donde el ticket salía pegado a un costado.
+  console.log('\n=== centrado en el papel ===');
+  for (const hojaMm of [80, 74, 72]) {
+    const m = await medirMargenesLaterales(comp, 80, hojaMm);
+    const dif = Math.abs(m.izquierdaMm - m.derechaMm);
+    // Medio milímetro es el redondeo a píxeles enteros del motor; más que eso
+    // ya se ve a simple vista en el papel.
+    revisar(
+      `hoja de ${hojaMm} mm: el vale queda centrado`,
+      dif <= 0.5,
+      `izq=${m.izquierdaMm.toFixed(2)} der=${m.derechaMm.toFixed(2)} (diferencia ${dif.toFixed(2)} mm)`,
+    );
+  }
+  // Y que el ajuste manual mueva de verdad lo que dice mover.
+  const centrado = await medirMargenesLaterales(comp, 80, 74);
+  const corrido = await medirMargenesLaterales(comp, 80, 74, 2);
+  revisar(
+    'correr el vale 2 mm lo mueve 2 mm a la derecha',
+    Math.abs(corrido.izquierdaMm - centrado.izquierdaMm - 2) <= 0.3,
+    `izq ${centrado.izquierdaMm.toFixed(2)} -> ${corrido.izquierdaMm.toFixed(2)}`,
   );
 
   // El nombre del artículo y su código tienen que arrancar en la misma columna.

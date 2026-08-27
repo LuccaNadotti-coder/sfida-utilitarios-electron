@@ -5,7 +5,7 @@
  * la otra viaja con la mercadería), ver el vale a escala real e imprimir o
  * guardar PDF. Recuerda la última impresora y el último papel usados.
  * ------------------------------------------------------------------------- */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type {
   AnchoPapel,
@@ -14,7 +14,7 @@ import type {
   VistaPreviaVale,
 } from '../../../compartido/contrato';
 import { useApp } from '../estado/app';
-import { Boton, Chips, Dialogo, Etiqueta, Selector, SpinNumero } from '../ui/base';
+import { Boton, Chips, Dialogo, Etiqueta, Selector, SpinNumero, useDebounce } from '../ui/base';
 
 const PAPELES: Array<{ id: AnchoPapel; texto: string }> = [
   { id: 80, texto: 'Ticket 80 mm' },
@@ -40,8 +40,15 @@ export function DlgImprimir({
   const [papel, setPapel] = useState<AnchoPapel>(80);
   const [copias, setCopias] = useState(2);
   const [ajustarAlto, setAjustarAlto] = useState(false);
+  const [corrimiento, setCorrimiento] = useState(0);
   const [previa, setPrevia] = useState<VistaPreviaVale | null>(null);
   const [trabajando, setTrabajando] = useState(false);
+  const caja = useRef<HTMLDivElement>(null);
+  const [anchoCaja, setAnchoCaja] = useState(0);
+  // Sin la espera, mover el corrimiento abriría una ventana de armado por cada
+  // toque en el botón. En A4 no se aplica: ahí la hoja es una hoja de verdad y
+  // el margen lo pone el `@page`.
+  const corrimientoQuieto = useDebounce(papel < 200 ? corrimiento : 0, 250);
 
   useEffect(() => {
     if (!abierto) return;
@@ -54,6 +61,7 @@ export function DlgImprimir({
       if (prefs) {
         setPapel(prefs.papel);
         setAjustarAlto(prefs.ajustarAlto);
+        setCorrimiento(prefs.corrimientoMm ?? 0);
         // Solo se restaura la impresora si sigue instalada.
         if (prefs.impresora && (lista ?? []).some((i) => i.name === prefs.impresora)) {
           setImpresora(prefs.impresora);
@@ -68,8 +76,17 @@ export function DlgImprimir({
   useEffect(() => {
     if (!abierto || id === null) return;
     setPrevia(null);
-    void pedir(window.sfida.impresion.vistaPrevia(tipo, id, papel)).then(setPrevia);
-  }, [abierto, tipo, id, papel, pedir]);
+    void pedir(window.sfida.impresion.vistaPrevia(tipo, id, papel, corrimientoQuieto)).then(setPrevia);
+  }, [abierto, tipo, id, papel, corrimientoQuieto, pedir]);
+
+  // Cuánto mide la caja de la vista previa, para calcular el aumento.
+  useEffect(() => {
+    if (!abierto) return;
+    const medir = (): void => setAnchoCaja(caja.current?.clientWidth ?? 0);
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, [abierto, previa]);
 
   async function imprimir(): Promise<void> {
     if (id === null) return;
@@ -81,6 +98,7 @@ export function DlgImprimir({
     const r = await pedir(
       window.sfida.impresion.imprimir({
         tipo, id, anchoMm: papel, deviceName: impresora, copias, ajustarAlto,
+        corrimientoMm: papel < 200 ? corrimiento : 0,
       }),
     );
     setTrabajando(false);
@@ -106,7 +124,15 @@ export function DlgImprimir({
     else if (r.motivo !== 'cancelado') avisar(`No se pudo guardar: ${r.motivo}`, 'err');
   }
 
-  const zoom = papel >= 200 ? 1.6 : 2.8;
+  // El aumento de la vista previa se CALCULA con lo que mide la caja: con un
+  // valor fijo, el papel ampliado era más ancho que su columna y el vale se
+  // veía cortado por los dos costados —justo donde hay que mirar si quedó
+  // derecho—. Se usa la propiedad `zoom` y no `transform: scale`, porque
+  // `transform` no cambia el espacio que ocupa y el recuadro no se enteraba.
+  const anchoPapelPx = ((previa?.anchoMm ?? papel) * 96) / 25.4;
+  const zoom = anchoCaja
+    ? Math.max(0.55, Math.min(papel >= 200 ? 1.6 : 2.8, (anchoCaja - 44) / anchoPapelPx))
+    : 1;
 
   return (
     <Dialogo
@@ -167,6 +193,37 @@ export function DlgImprimir({
             </div>
           )}
 
+          {papel < 200 && (
+            <div>
+              <Etiqueta>Correr el vale a los costados</Etiqueta>
+              <div className="flex flex-wrap items-center gap-2">
+                <SpinNumero
+                  valor={corrimiento}
+                  alCambiar={setCorrimiento}
+                  min={-10}
+                  max={10}
+                  paso={0.5}
+                  decimales={1}
+                  className="w-[150px]"
+                />
+                <span className="text-[13px] text-suave">mm</span>
+                {corrimiento !== 0 && (
+                  <button
+                    onClick={() => setCorrimiento(0)}
+                    className="cursor-pointer text-[12px] font-semibold text-azul hover:underline"
+                  >
+                    Volver al centro
+                  </button>
+                )}
+              </div>
+              <p className="mt-1.5 text-[12px] text-suave">
+                El vale sale centrado solo. Usá esto únicamente si el papel queda desparejo:
+                un número positivo lo mueve a la derecha y uno negativo, a la izquierda.
+                Se queda guardado para la próxima vez.
+              </p>
+            </div>
+          )}
+
           <div>
             <Etiqueta>Copias</Etiqueta>
             <SpinNumero valor={copias} alCambiar={setCopias} min={1} max={9} className="w-[140px]" />
@@ -192,19 +249,42 @@ export function DlgImprimir({
 
         <div>
           <Etiqueta>Así va a salir impreso</Etiqueta>
-          <div className="flex max-h-[52vh] justify-center overflow-auto rounded-xl border border-borde bg-[#e9edf3] p-5">
+          <div
+            ref={caja}
+            className="flex max-h-[52vh] justify-center overflow-auto rounded-xl border border-borde bg-[#e9edf3] p-5"
+          >
             {previa ? (
               <div
-                className="bg-white shadow-lg"
+                className="h-fit bg-white shadow-lg"
                 style={{
+                  zoom,
                   width: `${previa.anchoMm}mm`,
-                  padding: `${previa.margenMm}mm`,
-                  transform: `scale(${zoom})`,
-                  transformOrigin: 'top center',
-                  marginBottom: `${previa.altoHojaMm * (zoom - 1) * 3.78}px`,
+                  // A los costados no va relleno: el vale se centra, igual que
+                  // en el papel. Si se pusiera relleno fijo acá, la vista
+                  // previa mentiría justo sobre lo que se está mirando.
+                  padding: `${previa.margenMm}mm 0`,
                 }}
-                dangerouslySetInnerHTML={{ __html: previa.html }}
-              />
+              >
+                <div
+                  style={{
+                    width: `${previa.utilMm}mm`,
+                    margin: '0 auto',
+                    // La MISMA letra del documento que se imprime. Si se deja
+                    // la del programa, el ticket mide otra cosa acá que en el
+                    // papel y la vista previa deja de servir justo para lo
+                    // único que sirve: ver cómo va a salir.
+                    ...(papel < 200
+                      ? {
+                          fontFamily:
+                            "Consolas, 'Courier New', 'DejaVu Sans Mono', 'Liberation Mono', monospace",
+                          fontWeight: 600,
+                          lineHeight: '116%',
+                        }
+                      : {}),
+                  }}
+                  dangerouslySetInnerHTML={{ __html: previa.html }}
+                />
+              </div>
             ) : (
               <div className="py-16 text-center text-[13px] text-suave">Armando el vale…</div>
             )}

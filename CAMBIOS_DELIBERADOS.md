@@ -316,9 +316,22 @@ El PDF no cambió: ahí la medida la pone Chromium y siempre salió bien.
 
 El margen del ticket pasa de 3 mm a **5.5 mm** (80 mm) y **4.5 mm** (58 mm),
 porque la impresora térmica no imprime todo el ancho del papel y se comía los
-últimos caracteres de cada línea. El vale queda centrado en el rollo, como en
-el diseño anterior. La letra se achica sola: nunca se fija a mano. Ver la
-trampa 26.
+últimos caracteres de cada línea. La letra se achica sola: nunca se fija a
+mano. Ver la trampa 26.
+
+Y ese aire **no se pone con relleno, se pone centrando**: el vale se centra en
+la hoja que dé el controlador, que casi nunca mide el ancho nominal del rollo.
+Con relleno fijo el ticket quedaba pegado a un costado. Ver la trampa 27.
+
+Para las impresoras cuyo cabezal no imprime centrado queda el ajuste
+**«Correr el vale a los costados»**, en milímetros, en la ventana de imprimir.
+De fábrica está en 0 y se recuerda de una vez para la otra.
+
+De paso se arregló la **vista previa**, que era el único lugar donde mirar esto
+antes de gastar papel y mostraba el vale cortado por los dos costados: el
+aumento era fijo, así que el papel ampliado salía más ancho que su columna.
+Ahora el aumento se calcula con lo que mide la caja y el vale usa la misma
+letra del documento que se imprime.
 
 ---
 

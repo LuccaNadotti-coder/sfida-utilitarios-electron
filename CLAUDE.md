@@ -17,7 +17,7 @@ Es la reescritura en Electron de la versión Python + PySide6 que está en
 ```bash
 npm install                  # verifica que better-sqlite3 cargue en Electron
 npm run dev                  # la app, con recarga en caliente
-npm test                     # 258 pruebas de lógica, sin abrir ninguna ventana
+npm test                     # 264 pruebas de lógica, sin abrir ninguna ventana
 npm run typecheck            # TypeScript en los tres procesos
 npm run demo                 # crea datos/sfida_demo.db con datos de ejemplo
 npm run capturas             # capturas de las 7 pantallas en 1366×768 y 1920×1080
@@ -305,6 +305,14 @@ ventana de la aplicación, saldrían los botones y el menú en el papel.
     en 80 mm y **4.5 mm** en 58 mm: con los 3 mm de antes se perdían los
     últimos caracteres de cada línea. La letra no se toca a mano, se recalcula
     sola al cambiar el ancho útil. Ver la trampa 26.
+11. **El margen de los costados NO se pone con relleno: se centra.** El bloque
+    lleva su ancho útil y `margin: 0 auto`; el ancho del papel se declara
+    **solo `@media screen`**, para la vista previa y la foto. Al imprimir la
+    hoja la pone el controlador —y casi nunca mide el ancho nominal—, así que
+    un relleno fijo deja el ticket pegado a un costado. Lo comprueba
+    `medirMargenesLaterales()` emulando la impresión sobre hojas de 80, 74 y
+    72 mm. Ver la trampa 27. El ajuste **«Correr el vale a los costados»**
+    (en `config`) queda para las impresoras que ni así imprimen centrado.
 
 ### Cuentas de columnas
 
@@ -451,7 +459,7 @@ decisión.
 
 ## El registro de trampas
 
-`TRAMPAS.md` tiene 26 entradas, cada una con **cómo se detectó**. Esa parte
+`TRAMPAS.md` tiene 27 entradas, cada una con **cómo se detectó**. Esa parte
 suele ser más útil que la solución. Si encontrás algo que falló de una forma
 que no se parecía al problema real, o que funcionó dando un resultado falso,
 sumalo ahí.

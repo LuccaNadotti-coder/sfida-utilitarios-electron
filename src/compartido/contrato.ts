@@ -327,6 +327,14 @@ export interface OpcionesImpresion {
    * de verdad aceptan la medida y cortan justo. Ver TRAMPA 9.
    */
   ajustarAlto?: boolean;
+  /**
+   * Correr el vale a los costados, en milímetros. Negativo hacia la izquierda.
+   *
+   * El vale se centra solo en la hoja que dé el controlador. Esto es el ajuste
+   * fino para las impresoras cuyo cabezal no imprime centrado en el papel: se
+   * mueve de a medio milímetro hasta que los dos costados quedan iguales.
+   */
+  corrimientoMm?: number;
 }
 
 export interface Impresora {
@@ -484,12 +492,18 @@ export interface ApiSfida {
   impresion: {
     impresoras(): Promise<Respuesta<Impresora[]>>;
     preferencias(): Promise<
-      Respuesta<{ impresora: string; papel: AnchoPapel; ajustarAlto: boolean }>
+      Respuesta<{
+        impresora: string;
+        papel: AnchoPapel;
+        ajustarAlto: boolean;
+        corrimientoMm: number;
+      }>
     >;
     vistaPrevia(
       tipo: TipoComprobante,
       id: number,
       anchoMm: AnchoPapel,
+      corrimientoMm?: number,
     ): Promise<Respuesta<VistaPreviaVale>>;
     imprimir(o: OpcionesImpresion): Promise<Respuesta<ResultadoImpresion>>;
     guardarPdf(o: OpcionesImpresion): Promise<Respuesta<ResultadoImpresion>>;

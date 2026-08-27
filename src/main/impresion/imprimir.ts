@@ -77,6 +77,7 @@ async function abrirVale(
   anchoMm: AnchoPapel,
   modoMargen: ModoMargen = 'driver',
   declararTamano = true,
+  corrimientoMm = 0,
 ): Promise<ValeAbierto> {
   const esA4 = anchoMm >= 200;
   const html = documentoVale({
@@ -85,6 +86,7 @@ async function abrirVale(
     htmlA4: esA4 ? htmlDe(c) : null,
     modoMargen,
     declararTamano,
+    corrimientoMm,
   });
 
   const carpeta = mkdtempSync(join(tmpdir(), 'sfida-vale-'));
@@ -169,8 +171,12 @@ function pageSizeParaPdf(anchoMm: number, altoHojaMm: number): 'A4' | { width: n
 }
 
 /** Devuelve el vale renderizado, para la vista previa de la pantalla. */
-export async function vistaPrevia(c: Comprobante, anchoMm: AnchoPapel): Promise<VistaPreviaVale> {
-  const v = await abrirVale(c, anchoMm);
+export async function vistaPrevia(
+  c: Comprobante,
+  anchoMm: AnchoPapel,
+  corrimientoMm = 0,
+): Promise<VistaPreviaVale> {
+  const v = await abrirVale(c, anchoMm, 'driver', true, corrimientoMm);
   try {
     return {
       html: v.medidas.html,
@@ -195,11 +201,12 @@ export async function imprimirVale(
   copias: number,
   ajustarAlto = false,
   modoMargen: ModoMargen = 'driver',
+  corrimientoMm = 0,
 ): Promise<{ ok: boolean; motivo?: string }> {
   // El A4 sí declara su tamaño; el ticket solo cuando además se le pide la
   // medida a la impresora. Si no, manda el papel del controlador.
   const declararTamano = anchoMm >= 200 || ajustarAlto;
-  const v = await abrirVale(c, anchoMm, modoMargen, declararTamano);
+  const v = await abrirVale(c, anchoMm, modoMargen, declararTamano, corrimientoMm);
   try {
     const config: Electron.WebContentsPrintOptions = {
       silent: true,
@@ -221,6 +228,76 @@ export async function imprimirVale(
     });
   } finally {
     cerrarVale(v);
+  }
+}
+
+/**
+ * Cuánto blanco queda a cada lado del vale en una hoja de `anchoHojaMm`.
+ *
+ * Es la comprobación del centrado, y hace falta porque el error no se veía en
+ * la vista previa: ahí la hoja siempre mide lo que dice el papel. En la
+ * impresora no. Por eso acá se **emula la impresión** (`media: print`, que es
+ * cuando el `@media screen` deja de aplicar) sobre una hoja del ancho que se
+ * pida, que es como reproducir un controlador que declara 74 mm para un rollo
+ * de 80.
+ *
+ * Devuelve milímetros; si los dos números no son casi iguales, el ticket sale
+ * corrido.
+ */
+export async function medirMargenesLaterales(
+  c: Comprobante,
+  anchoMm: AnchoPapel,
+  anchoHojaMm: number,
+  corrimientoMm = 0,
+): Promise<{ izquierdaMm: number; derechaMm: number; hojaMm: number }> {
+  const esA4 = anchoMm >= 200;
+  const html = documentoVale({
+    anchoMm,
+    texto: esA4 ? null : textoDe(c, anchoMm),
+    htmlA4: esA4 ? htmlDe(c) : null,
+    modoMargen: 'driver',
+    declararTamano: false,
+    corrimientoMm,
+  });
+  const carpeta = mkdtempSync(join(tmpdir(), 'sfida-centrado-'));
+  const archivo = join(carpeta, 'vale.html');
+  writeFileSync(archivo, html, 'utf8');
+
+  valesAbiertos += 1;
+  const w = new BrowserWindow({
+    show: false,
+    useContentSize: true,
+    width: Math.round((anchoHojaMm * 96) / 25.4),
+    height: 1400,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false },
+  });
+  try {
+    await w.loadFile(archivo);
+    await w.webContents.executeJavaScript('document.fonts.ready.then(() => true)');
+    let adjunto = false;
+    try {
+      w.webContents.debugger.attach('1.3');
+      adjunto = true;
+      await w.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', { media: 'print' });
+    } catch {
+      /* sin emulación la medida no sirve: se avisa devolviendo NaN */
+    }
+    const r = (await w.webContents.executeJavaScript(`(function () {
+      var MM = 96 / 25.4;
+      var caja = document.getElementById('hoja').getBoundingClientRect();
+      // clientWidth y no innerWidth: descuenta la barra de desplazamiento, que
+      // no existe en el papel y correría la medición.
+      var hoja = document.documentElement.clientWidth;
+      return {
+        izquierdaMm: caja.left / MM,
+        derechaMm: (hoja - caja.right) / MM,
+        hojaMm: hoja / MM
+      };
+    })()`)) as { izquierdaMm: number; derechaMm: number; hojaMm: number };
+    if (adjunto) w.webContents.debugger.detach();
+    return r;
+  } finally {
+    cerrarVale({ w, carpeta });
   }
 }
 
