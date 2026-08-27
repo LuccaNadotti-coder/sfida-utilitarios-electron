@@ -29,6 +29,7 @@ import {
   Campo,
   ComboArticulo,
   Etiqueta,
+  POR_PAGINA,
   Selector,
   SelectorUnidad,
   SpinNumero,
@@ -368,7 +369,9 @@ export function PaginaSalidas({ extra }: { extra: DestinoExtra | null }): React.
           alDobleClic={(s) => setViendo(s.id)}
           vacio={{ titulo: 'Todavía no hay vales registrados', detalle: 'Armá el primero con el formulario de arriba.' }}
           sinResultados={texto || filtroSuc ? { titulo: 'Ningún vale coincide', detalle: 'Probá con otro número, otra persona u otra sucursal.' } : undefined}
-          alto="max-h-[320px]"
+          // Igual que el historial de ingresos: paginado, porque los vales se
+          // acumulan y la lista completa no la mira nadie.
+          porPagina={POR_PAGINA}
         />
       </Caja>
 

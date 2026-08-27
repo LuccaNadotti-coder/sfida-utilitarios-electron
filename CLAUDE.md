@@ -17,7 +17,7 @@ Es la reescritura en Electron de la versión Python + PySide6 que está en
 ```bash
 npm install                  # verifica que better-sqlite3 cargue en Electron
 npm run dev                  # la app, con recarga en caliente
-npm test                     # 255 pruebas de lógica, sin abrir ninguna ventana
+npm test                     # 258 pruebas de lógica, sin abrir ninguna ventana
 npm run typecheck            # TypeScript en los tres procesos
 npm run demo                 # crea datos/sfida_demo.db con datos de ejemplo
 npm run capturas             # capturas de las 7 pantallas en 1366×768 y 1920×1080
@@ -300,6 +300,11 @@ ventana de la aplicación, saldrían los botones y el menú en el papel.
    abajo. Sin `pageSize` (y sin `@page { size }`) la hoja es la del
    controlador y el vale empieza arriba de todo. La casilla «Cortar el papel
    justo donde termina el vale» vuelve al modo anterior. Ver la trampa 25.
+10. **El papel mide más de lo que la impresora imprime.** Un rollo de 80 mm
+    imprime unos 72 mm, centrados. Por eso `margen()` deja **5.5 mm** por lado
+    en 80 mm y **4.5 mm** en 58 mm: con los 3 mm de antes se perdían los
+    últimos caracteres de cada línea. La letra no se toca a mano, se recalcula
+    sola al cambiar el ancho útil. Ver la trampa 26.
 
 ### Cuentas de columnas
 
@@ -408,6 +413,12 @@ En web no pasa igual, pero hay que hacerlo bien:
   el orden de la hoja de estilos, no el del atributo `class`. Eso rompía las
   barras de filtros.
 - Las tablas anchas scrollean dentro de su caja (`overflow-auto`).
+- **Las listas que crecen van paginadas**: `<Tabla porPagina={POR_PAGINA} />`
+  (10 filas, con selector al pie). No es estética: el catálogo entero en el
+  DOM hacía que cada tecla del buscador volviera a montar y animar cientos de
+  filas, y en la PC del almacén eso se siente como que el programa se traba.
+  Lo que se escribe dentro de una fila (conteo físico, mínimos sugeridos) se
+  guarda por id, no en la fila, así que cambiar de página no lo pierde.
 - `npm run capturas` deja un informe `[layout]` con los desbordes: tiene que
   dar `desbordes: []` en los dos tamaños. **Pero las capturas hay que
   mirarlas**: el verificador no ve que algo quede feo, solo que no desborde.
@@ -440,7 +451,7 @@ decisión.
 
 ## El registro de trampas
 
-`TRAMPAS.md` tiene 25 entradas, cada una con **cómo se detectó**. Esa parte
+`TRAMPAS.md` tiene 26 entradas, cada una con **cómo se detectó**. Esa parte
 suele ser más útil que la solución. Si encontrás algo que falló de una forma
 que no se parecía al problema real, o que funcionó dando un resultado falso,
 sumalo ahí.

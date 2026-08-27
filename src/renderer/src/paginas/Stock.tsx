@@ -18,6 +18,7 @@ import {
   Buscador,
   Caja,
   Chips,
+  POR_PAGINA,
   Pastilla,
   Selector,
   Tabla,
@@ -173,6 +174,9 @@ export function PaginaStock({
           filas={filas}
           clave={(f) => f.id}
           cargando={cargando}
+          // De a 10: con el catálogo entero en pantalla, cada tecla del
+          // buscador volvía a dibujar cientos de filas y se sentía trabado.
+          porPagina={POR_PAGINA}
           seleccionada={sel}
           alSeleccionar={(f) => setSel(f.id)}
           alDobleClic={(f) => setEditando(f.id)}

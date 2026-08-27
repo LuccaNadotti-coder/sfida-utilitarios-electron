@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SucursalConTotales } from '../../../compartido/contrato';
 import { DlgSucursal } from '../dialogos/Sucursal';
 import { useApp } from '../estado/app';
-import { Boton, Buscador, Caja, Tabla, dmy, fmtNum, useDebounce } from '../ui/base';
+import { Boton, Buscador, Caja, POR_PAGINA, Tabla, dmy, fmtNum, useDebounce } from '../ui/base';
 
 export function PaginaSucursales(): React.JSX.Element {
   const { pedir, avisar, refrescarTodo, refrescos } = useApp();
@@ -70,6 +70,7 @@ export function PaginaSucursales(): React.JSX.Element {
         alDobleClic={(s) => setEditando(s.id)}
         vacio={{ titulo: 'Todavía no hay sucursales', detalle: 'Cargá la primera con «Nueva sucursal». Sin sucursales no se pueden registrar egresos.' }}
         sinResultados={texto ? { titulo: 'Ninguna sucursal coincide', detalle: 'Probá con otro código, nombre o responsable.' } : undefined}
+        porPagina={POR_PAGINA}
       />
 
       <DlgSucursal

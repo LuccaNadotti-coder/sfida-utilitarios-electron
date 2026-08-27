@@ -19,6 +19,7 @@ import {
   campo,
   cortar,
   htmlA4,
+  margen,
   textoTicket,
   type DatosVale,
 } from '../src/main/impresion/ticket';
@@ -63,6 +64,25 @@ const DETALLE_TIPICO = [
   { codigo: 'LIM-0003', nombre: 'JABON LIQUIDO PARA MANOS', cantidad: 5, unidad: 'GAL' },
   { codigo: 'LIM-0004', nombre: 'DETERGENTE EN POLVO', cantidad: 2.5, unidad: 'KG' },
 ];
+
+describe('margen del papel', () => {
+  // El rollo térmico imprime menos ancho del que mide el papel: con 3 mm de
+  // margen la punta derecha de cada línea se salía del área imprimible.
+  it('el ticket deja al menos 4.5 mm libres a cada lado', () => {
+    expect(margen(80)).toBeGreaterThanOrEqual(4.5);
+    expect(margen(58)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('el margen nunca se come mas de la sexta parte del papel', () => {
+    for (const mm of [80, 58, 210] as const) {
+      expect(margen(mm) * 2).toBeLessThan(mm / 3);
+    }
+  });
+
+  it('el A4 conserva su margen ancho', () => {
+    expect(margen(210)).toBe(12);
+  });
+});
 
 describe('ancho del papel', () => {
   for (const mm of [80, 58] as const) {
@@ -158,8 +178,8 @@ describe('firmas', () => {
 describe('contenido del vale', () => {
   it('lleva membrete, numero de vale y las dos firmas', () => {
     const t = textoTicket(vale(DETALLE_TIPICO), 80);
-    // v5: el título es «EGRESO DE ALMACEN», sin la palabra «VALE».
-    expect(t).toContain('EGRESO DE ALMACEN');
+    // v5.2: el título es «EGRESOS ALMACEN UTILITARIOS», hermano del de ingreso.
+    expect(t).toContain('EGRESOS ALMACEN UTILITARIOS');
     expect(t).not.toContain('VALE DE EGRESO DE ALMACEN');
     expect(t).toContain('SFIDA');
     expect(t).toContain('RUC 20512345678');
@@ -227,7 +247,7 @@ describe('version A4', () => {
     const h = htmlA4(vale(DETALLE_TIPICO));
     expect(h).toContain('<table');
     expect(h).toContain('Recib');
-    expect(h).toContain('VALE DE EGRESO');
+    expect(h).toContain('EGRESOS ALMAC&Eacute;N UTILITARIOS');
   });
 
   it('escapa el HTML de los nombres', () => {

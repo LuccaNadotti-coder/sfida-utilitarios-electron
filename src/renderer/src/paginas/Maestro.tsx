@@ -25,6 +25,7 @@ import {
   Campo,
   Chips,
   Etiqueta,
+  POR_PAGINA,
   SpinNumero,
   Tabla,
   fmtNum,
@@ -300,7 +301,9 @@ function TabMinimos(): React.JSX.Element {
         filas={filas}
         clave={(f) => f.id}
         vacio={{ titulo: 'No hay artículos activos', detalle: 'Cargá artículos para poder calcular mínimos.' }}
-        alto="max-h-[440px]"
+        // Lo escrito vive en `nuevos`, indexado por artículo: pasar de página
+        // no borra los mínimos ya tipeados.
+        porPagina={POR_PAGINA}
       />
     </Caja>
   );
@@ -403,7 +406,7 @@ function TabCatalogos(): React.JSX.Element {
             seleccionada={sel}
             alSeleccionar={(a) => setSel(a.id)}
             vacio={{ titulo: 'No hay artículos desactivados', detalle: 'Los que tienen movimientos se desactivan en vez de borrarse.' }}
-            alto="max-h-[380px]"
+            porPagina={POR_PAGINA}
           />
           <div className="mt-3">
             <Boton
@@ -504,7 +507,8 @@ function TabAuditoria(): React.JSX.Element {
           clave={(a) => a.id}
           vacio={{ titulo: 'El historial está vacío', detalle: 'Las acciones se van registrando solas a medida que se usa el programa.' }}
           sinResultados={texto ? { titulo: 'Nada coincide con la búsqueda', detalle: 'Probá con otra palabra.' } : undefined}
-          alto="max-h-[520px]"
+          // El historial es la tabla más larga del programa: siempre paginada.
+          porPagina={POR_PAGINA}
         />
       </Caja>
       {nodo}

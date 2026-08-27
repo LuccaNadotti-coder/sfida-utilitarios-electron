@@ -25,6 +25,7 @@ import {
   Chips,
   ComboArticulo,
   Etiqueta,
+  POR_PAGINA,
   Tabla,
   Tarjeta,
   dmy,
@@ -321,6 +322,7 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
             ]}
             filas={consumo}
             clave={(c) => c.codigo}
+            porPagina={POR_PAGINA}
             seleccionada={sucSel}
             alSeleccionar={(c) => setSucSel(c.codigo)}
             vacio={{ titulo: 'Sin repartos en el período', detalle: 'Probá ampliando las fechas.' }}
@@ -366,6 +368,8 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
             ]}
             filas={kardex}
             clave={(m) => `${m.fecha}-${m.documento}-${m.entrada}-${m.salida}-${m.saldo}`}
+            // El kardex de un artículo muy movido son cientos de renglones.
+            porPagina={POR_PAGINA}
             vacio={
               artKardex
                 ? { titulo: 'Sin movimientos en el período', detalle: 'Probá ampliando las fechas.' }
@@ -386,6 +390,7 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
           ]}
           filas={ranking}
           clave={(d) => d.codigo}
+          porPagina={POR_PAGINA}
           vacio={{ titulo: 'Sin repartos en el período', detalle: 'Probá ampliando las fechas.' }}
         />
       )}
@@ -417,6 +422,7 @@ export function PaginaReportes({ extra }: { extra: DestinoExtra | null }): React
             ]}
             filas={precios}
             clave={(f) => f.det_id}
+            porPagina={POR_PAGINA}
             vacio={
               artPrecios
                 ? { titulo: 'Sin compras en el período', detalle: 'Probá ampliando las fechas.' }

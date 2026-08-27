@@ -22,9 +22,22 @@ export const SANGRIA_ITEM = ANCHO_CANT + 1 + ANCHO_UND + 1; // = 12
 /** Ancho de la columna de los rótulos de la cabecera («N° VALE :»). */
 export const SANGRIA_CAMPO = 10;
 
-/** Margen del papel, por lado, en milímetros. */
+/**
+ * Margen del papel, por lado, en milímetros.
+ *
+ * Con 3 mm el texto llegaba al borde y la impresora térmica se comía la punta
+ * derecha de cada línea: el área que el rollo imprime de verdad es más angosta
+ * que el papel (en un rollo de 80 mm suelen ser unos 72 mm, centrados), así que
+ * lo que arrancaba en el milímetro 3 terminaba fuera del área en el otro
+ * extremo. Con 5.5 mm el vale entra completo y queda centrado en el rollo.
+ *
+ * El texto NO se achica a mano: al reducir el ancho útil, el ajuste automático
+ * de `documento.ts` recalcula el tamaño de letra solo. Son unos 3 caracteres
+ * menos de ancho, que es justo lo que se estaba perdiendo.
+ */
 export function margen(anchoMm: number): number {
-  return anchoMm < 200 ? 3.0 : 12.0;
+  if (anchoMm >= 200) return 12.0;
+  return anchoMm >= 70 ? 5.5 : 4.5;
 }
 
 /* ------------------------------------------------------------- utilidades */
@@ -231,10 +244,12 @@ export function textoTicket(v: DatosVale, anchoMm: number): string {
   const totalItems = v.det.length;
   const totalUnd = v.det.reduce((s, d) => s + Number(d.cantidad), 0);
 
-  // v5: el título es «EGRESO DE ALMACEN» (antes «VALE DE SALIDA DE ALMACEN»),
-  // y ya NO salen las líneas ENTREGA/RECIBE en la cabecera: esos datos se
+  // v5.2: el título es «EGRESOS ALMACEN UTILITARIOS», igual que el del ingreso
+  // pero con la palabra que corresponde. Antes decía «EGRESO DE ALMACEN» y los
+  // dos comprobantes no se parecían entre sí.
+  // Ya NO salen las líneas ENTREGA/RECIBE en la cabecera: esos datos se
   // escriben a mano sobre las firmas del pie.
-  const cabecera = ['EGRESO DE ALMACEN', linea];
+  const cabecera = ['EGRESOS ALMACEN UTILITARIOS', linea];
   cabecera.push(...campo('N° VALE :', v.cab.nro_vale, cols));
   cabecera.push(...campo('FECHA   :', dmy(v.cab.fecha), cols));
   cabecera.push(...campo('DESTINO :', `${v.cab.suc_codigo} - ${v.cab.sucursal}`, cols));
@@ -313,7 +328,7 @@ export function htmlA4(v: DatosVale): string {
     `<div style="font-size:8pt;color:#555">${esc(v.empresaDir)}` +
     (v.empresaRuc ? `  &middot;  RUC ${esc(v.empresaRuc)}` : '') +
     '</div></td>' +
-    '<td align="right"><div style="font-size:13pt;font-weight:bold">VALE DE EGRESO</div>' +
+    '<td align="right"><div style="font-size:13pt;font-weight:bold">EGRESOS ALMAC&Eacute;N UTILITARIOS</div>' +
     `<div style="font-size:14pt;font-weight:bold">N&deg; ${esc(v.cab.nro_vale)}</div>` +
     `<div style="font-size:9pt;color:#555">${dmy(v.cab.fecha)}</div></td>` +
     '</tr></table>' +

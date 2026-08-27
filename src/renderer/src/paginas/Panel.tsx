@@ -17,7 +17,7 @@ import type {
 import type { ClavePagina } from '../App';
 import { useAnimaciones } from '../estado/animaciones';
 import { useApp } from '../estado/app';
-import { Caja, Pastilla, Tabla, Tarjeta, dmy, fmtMoney, fmtNum } from '../ui/base';
+import { Caja, POR_PAGINA, Pastilla, Tabla, Tarjeta, dmy, fmtMoney, fmtNum } from '../ui/base';
 import { Icono } from '../ui/iconos';
 
 const VERDE = '#22a06b';
@@ -134,7 +134,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
             clave={(a) => a.codigo}
             cargando={cargando}
             vacio={{ titulo: 'Sin alertas', detalle: 'Todo el stock está sobre el mínimo.' }}
-            alto="max-h-[240px]"
+            porPagina={POR_PAGINA}
           />
         </Caja>
       </div>
@@ -158,6 +158,7 @@ export function PaginaPanel({ irA }: { irA: (d: ClavePagina) => void }): React.J
           filas={movs}
           clave={(m) => m.id}
           cargando={cargando}
+          porPagina={POR_PAGINA}
           vacio={{ titulo: 'Todavía no hay movimientos', detalle: 'Registrá un ingreso o un egreso para verlos acá.' }}
         />
       </Caja>

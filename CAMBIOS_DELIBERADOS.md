@@ -263,7 +263,8 @@ El detalle completo, con lo que se revisó y lo que queda abierto, está en
 
 Todo lo que la persona lee dice ahora **egreso**: el menú, el título de la
 pantalla, los botones, la tarjeta del panel, el kardex y los dos tickets
-(«EGRESO DE ALMACEN» y «VALE DE EGRESO»).
+(«EGRESOS ALMACEN UTILITARIOS», el mismo formato que el de ingreso; en la
+v5.1 decían «EGRESO DE ALMACEN» y «VALE DE EGRESO»).
 
 El correlativo del vale pasa de `V{año}-0000` a **`E{año}-0000`**, para que
 haga juego con la `I` de los ingresos.
@@ -303,6 +304,76 @@ termina el vale»** en la ventana de imprimir, apagada de fábrica, para los
 rollos cuyo controlador sí acepta el alto a medida.
 
 El PDF no cambió: ahí la medida la pone Chromium y siempre salió bien.
+
+---
+
+## 12. El vale se separa del borde del papel
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.2) |
+| **Aprobado** | Sí, corrección de un defecto |
+
+El margen del ticket pasa de 3 mm a **5.5 mm** (80 mm) y **4.5 mm** (58 mm),
+porque la impresora térmica no imprime todo el ancho del papel y se comía los
+últimos caracteres de cada línea. El vale queda centrado en el rollo, como en
+el diseño anterior. La letra se achica sola: nunca se fija a mano. Ver la
+trampa 26.
+
+---
+
+## 13. El ticket de egreso se llama igual que el de ingreso
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.2) |
+| **Aprobado** | Sí, pedido explícito |
+
+El título pasa de «EGRESO DE ALMACEN» a **«EGRESOS ALMACEN UTILITARIOS»**, que
+es el hermano exacto de «INGRESOS ALMACEN UTILITARIOS». En el A4, «VALE DE
+EGRESO» pasa a **«EGRESOS ALMACÉN UTILITARIOS»**. Los dos comprobantes se leen
+ahora como parte del mismo juego de papeles.
+
+---
+
+## 14. Las listas largas se muestran de a 10, con paginador
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.2) |
+| **Aprobado** | Sí, pedido explícito |
+
+Antes cada tabla dibujaba TODAS sus filas. Con el catálogo completo o con años
+de boletas, cada tecla del buscador rearmaba y animaba cientos de filas y la
+aplicación se sentía trabada.
+
+Ahora `<Tabla>` acepta `porPagina` y al pie aparece «1–10 de 137», el selector
+**Filas: 5 / 10 / 25 / 50 / 100 / Todas** y las flechas. De fábrica van 10.
+Está puesto en artículos y stock, qué comprar, conteo físico, los dos
+historiales, sucursales, el panel, los reportes y el historial del Control
+Maestro.
+
+Al buscar o filtrar se vuelve sola a la primera página: quedarse en la página 7
+de una lista que ahora tiene 2 se ve como una tabla vacía.
+
+---
+
+## 15. La cantidad se escribe como el precio
+
+| | |
+|---|---|
+| **Estado** | Hecho (v5.2) |
+| **Aprobado** | Sí, pedido explícito |
+
+El campo de cantidad mostraba siempre el número formateado («0.00»), así que
+para cargar una cantidad había que **seleccionar los dígitos con el mouse** y
+escribir encima; borrar un dígito devolvía «0.00» y no se podía tipear el punto
+decimal.
+
+Ahora se comporta como el campo de soles, que ya era cómodo: en cero se ve
+vacío (con el 0 de fondo), al entrar se selecciona todo solo, y mientras se
+escribe manda el texto crudo, así «12.» es un estado válido. Los botones − y +
+siguen estando, y ya no roban el tabulador.
 
 ---
 

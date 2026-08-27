@@ -252,7 +252,21 @@ export function Selector<T extends string | number>({
   );
 }
 
-/** Port de `SpinNumero`: cantidad con botones − y +. */
+/**
+ * Port de `SpinNumero`: cantidad con botones − y +.
+ *
+ * Se escribe igual de fácil que el campo de soles, y por el mismo motivo:
+ *
+ *  - Mientras se escribe manda el TEXTO CRUDO, no el número. Antes el campo
+ *    mostraba siempre `valor.toFixed(2)`, así que borrar un dígito devolvía
+ *    «0.00» y había que seleccionar con el mouse para escribir encima. «12.»
+ *    es un estado intermedio válido que `Number` convertiría en 12 y dejaría
+ *    imposible tipear el decimal.
+ *  - En cero se ve VACÍO, con el 0 de fondo: escribir la cantidad es teclear,
+ *    no borrar primero.
+ *  - Al entrar al campo se selecciona todo, así el primer dígito reemplaza lo
+ *    que había.
+ */
 export function SpinNumero({
   valor,
   alCambiar,
@@ -260,7 +274,6 @@ export function SpinNumero({
   max = 9999999,
   decimales = 0,
   paso = 1,
-  prefijo = '',
   className = '',
 }: {
   valor: number;
@@ -269,33 +282,60 @@ export function SpinNumero({
   max?: number;
   decimales?: number;
   paso?: number;
-  prefijo?: string;
   className?: string;
 }): React.JSX.Element {
+  const [texto, setTexto] = useState<string | null>(null);
   const acotar = (v: number): number => Math.min(max, Math.max(min, v));
-  const mostrar = decimales > 0 ? valor.toFixed(decimales) : String(valor);
+  const mostrado = texto ?? (valor === 0 ? '' : String(valor));
+
+  const mover = (delta: number): void => {
+    setTexto(null);
+    alCambiar(acotar(Number((valor + delta).toFixed(4))));
+  };
+
   return (
     <div
-      className={`flex items-center gap-1 rounded-lg border border-[#d9dfe8] bg-white px-1 py-1 ${className}`}
+      className={`flex items-center gap-1 rounded-lg border border-[#d9dfe8] bg-white px-1 py-1 focus-within:border-azul focus-within:ring-1 focus-within:ring-azul ${className}`}
     >
       <button
-        onClick={() => alCambiar(acotar(Number((valor - paso).toFixed(4))))}
+        onClick={() => mover(-paso)}
+        tabIndex={-1}
         className="size-8 shrink-0 cursor-pointer rounded-md bg-separador text-[17px] leading-none font-semibold text-[#3a4553] hover:bg-[#dfe5ee] active:bg-azul active:text-white"
       >
         −
       </button>
       <input
-        value={prefijo + mostrar}
-        onChange={(e) => {
-          const limpio = e.target.value.replace(prefijo, '').replace(',', '.').trim();
-          const n = Number(limpio);
-          if (Number.isFinite(n)) alCambiar(acotar(n));
-          else if (limpio === '') alCambiar(min);
+        inputMode="decimal"
+        value={mostrado}
+        placeholder={decimales > 0 ? (0).toFixed(decimales) : '0'}
+        onFocus={(e) => e.currentTarget.select()}
+        // Con el mouse no alcanza el `onFocus`: al soltar el botón, el
+        // navegador pone el cursor donde se hizo clic y deshace la selección.
+        // Se adelanta al primer clic —y solo al primero, para que después se
+        // pueda corregir un dígito en el medio.
+        onMouseDown={(e) => {
+          const caja = e.currentTarget;
+          if (document.activeElement !== caja) {
+            e.preventDefault();
+            caja.focus();
+            caja.select();
+          }
         }}
-        className="min-w-0 flex-1 cursor-text border-0 bg-transparent px-1 text-center text-[15px] font-semibold outline-none select-text"
+        onChange={(e) => {
+          const crudo = e.target.value.replace(',', '.').trim();
+          // Solo dígitos y un punto: cualquier otra tecla se ignora en vez de
+          // dejar el campo en un estado que después no se puede corregir.
+          if (crudo !== '' && !/^\d*\.?\d*$/.test(crudo)) return;
+          setTexto(crudo);
+          const n = crudo === '' || crudo === '.' ? min : Number(crudo);
+          if (Number.isFinite(n)) alCambiar(acotar(n));
+        }}
+        onBlur={() => setTexto(null)}
+        className="min-w-0 flex-1 cursor-text border-0 bg-transparent px-1 text-center text-[15px] font-semibold outline-none select-text placeholder:font-normal placeholder:text-[#a9b3c1]"
       />
       <button
-        onClick={() => alCambiar(acotar(Number((valor + paso).toFixed(4))))}
+        onClick={() => mover(paso)}
+        tabIndex={-1}
         className="size-8 shrink-0 cursor-pointer rounded-md bg-separador text-[17px] leading-none font-semibold text-[#3a4553] hover:bg-[#dfe5ee] active:bg-azul active:text-white"
       >
         +
@@ -415,11 +455,23 @@ export interface Columna<T> {
   render: (fila: T) => ReactNode;
 }
 
+/** Cuántas filas por página ofrece el paginador. El 0 es «todas». */
+const TAMANOS_PAGINA = [5, 10, 25, 50, 100, 0];
+
+/** Filas por página de fábrica, cuando una pantalla pide paginado. */
+export const POR_PAGINA = 10;
+
 /**
  * Tabla con estados de carga, vacío y filtrado sin resultados.
  *
  * NUNCA muestra una tabla en blanco sin explicación: es requisito de la
  * fase 3 y arregla algo que la versión Qt hacía a medias.
+ *
+ * Con `porPagina` la tabla dibuja SOLO esa cantidad de filas y agrega el
+ * paginador al pie. No es un capricho de diseño: con cientos de artículos, cada
+ * tecla del buscador volvía a montar y animar todas las filas, y en la PC del
+ * almacén eso se sentía como que la aplicación se trababa. Paginando, el DOM
+ * nunca pasa de unas pocas filas por más que crezca la base.
  */
 export function Tabla<T>({
   columnas,
@@ -432,6 +484,7 @@ export function Tabla<T>({
   alSeleccionar,
   alDobleClic,
   alto = '',
+  porPagina = 0,
 }: {
   columnas: Array<Columna<T>>;
   filas: T[];
@@ -443,8 +496,23 @@ export function Tabla<T>({
   alSeleccionar?: (f: T) => void;
   alDobleClic?: (f: T) => void;
   alto?: string;
+  /** Filas por página. 0 (de fábrica) muestra la lista completa. */
+  porPagina?: number;
 }): React.JSX.Element {
   const anim = useAnimaciones();
+  const [tam, setTam] = useState(porPagina);
+  const [pagina, setPagina] = useState(1);
+
+  // Al cambiar la cantidad de filas —buscar, filtrar, anular— se vuelve a la
+  // primera página: quedarse en la 7 de una lista que ahora tiene 2 páginas
+  // parece una tabla vacía.
+  useEffect(() => setPagina(1), [filas.length, tam]);
+
+  const paginado = tam > 0 && filas.length > tam;
+  const totalPaginas = paginado ? Math.ceil(filas.length / tam) : 1;
+  const actual = Math.min(pagina, totalPaginas);
+  const desde = paginado ? (actual - 1) * tam : 0;
+  const visibles = paginado ? filas.slice(desde, desde + tam) : filas;
 
   if (cargando) {
     return (
@@ -493,7 +561,7 @@ export function Tabla<T>({
             </tr>
           </thead>
           <tbody>
-            {filas.map((f, i) => {
+            {visibles.map((f, i) => {
               const k = clave(f);
               const sel = seleccionada !== undefined && seleccionada === k;
               return (
@@ -525,6 +593,83 @@ export function Tabla<T>({
             })}
           </tbody>
         </table>
+      </div>
+      {/* La condición mira `porPagina`, no `tam`: si mirara `tam`, elegir
+          «Todas» escondería el propio control que permite volver a paginar. */}
+      {porPagina > 0 && filas.length > TAMANOS_PAGINA[0]! && (
+        <Paginador
+          total={filas.length}
+          desde={desde}
+          mostradas={visibles.length}
+          pagina={actual}
+          totalPaginas={totalPaginas}
+          tam={tam}
+          alCambiarPagina={setPagina}
+          alCambiarTam={setTam}
+        />
+      )}
+    </div>
+  );
+}
+
+/** El pie de la tabla paginada: cuántas se ven, y cómo pasar de página. */
+function Paginador({
+  total,
+  desde,
+  mostradas,
+  pagina,
+  totalPaginas,
+  tam,
+  alCambiarPagina,
+  alCambiarTam,
+}: {
+  total: number;
+  desde: number;
+  mostradas: number;
+  pagina: number;
+  totalPaginas: number;
+  tam: number;
+  alCambiarPagina: (p: number) => void;
+  alCambiarTam: (t: number) => void;
+}): React.JSX.Element {
+  const flecha =
+    'grid size-7 shrink-0 place-items-center rounded-md border border-[#d9dfe8] bg-white text-[13px] font-semibold text-[#3a4553] transition-colors hover:bg-gris-fondo disabled:cursor-not-allowed disabled:text-[#c3ccda] disabled:hover:bg-white';
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-separador bg-gris-cab px-3 py-2 text-[12px] text-suave">
+      <span>
+        {mostradas === 0 ? 0 : desde + 1}–{desde + mostradas} de {total}
+      </span>
+      <div className="flex-1" />
+      <label className="flex items-center gap-1.5">
+        Filas
+        <select
+          value={String(tam)}
+          onChange={(e) => alCambiarTam(Number(e.target.value))}
+          className="cursor-pointer rounded-md border border-[#d9dfe8] bg-white px-2 py-1 text-[12px] outline-none focus:border-azul"
+        >
+          {TAMANOS_PAGINA.map((t) => (
+            <option key={t} value={String(t)}>
+              {t === 0 ? 'Todas' : t}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="flex items-center gap-1">
+        <button className={flecha} title="Primera página" disabled={pagina <= 1} onClick={() => alCambiarPagina(1)}>
+          «
+        </button>
+        <button className={flecha} title="Página anterior" disabled={pagina <= 1} onClick={() => alCambiarPagina(pagina - 1)}>
+          ‹
+        </button>
+        <span className="px-1 font-semibold text-[#3a4553] tabular-nums">
+          {pagina} / {totalPaginas}
+        </span>
+        <button className={flecha} title="Página siguiente" disabled={pagina >= totalPaginas} onClick={() => alCambiarPagina(pagina + 1)}>
+          ›
+        </button>
+        <button className={flecha} title="Última página" disabled={pagina >= totalPaginas} onClick={() => alCambiarPagina(totalPaginas)}>
+          »
+        </button>
       </div>
     </div>
   );

@@ -20,6 +20,7 @@ import {
   Caja,
   Chips,
   Etiqueta,
+  POR_PAGINA,
   Pastilla,
   Selector,
   Tabla,
@@ -207,6 +208,7 @@ export function PanelComprar(): React.JSX.Element {
             ? { titulo: 'Ningún artículo coincide', detalle: 'Probá con otra palabra u otro filtro.' }
             : undefined
         }
+        porPagina={POR_PAGINA}
       />
 
       <p className="text-[12px] text-suave">

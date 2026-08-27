@@ -288,6 +288,32 @@ apagada de fábrica.
 
 ---
 
+## v5.2
+
+### 26. El papel mide 80 mm, pero la impresora térmica no imprime 80 mm
+
+**Qué pasó.** El ticket salía con la punta derecha de cada línea comida: se
+perdían unos tres caracteres, justo los de la columna de la derecha (los
+totales y el final de los nombres largos). En el PDF y en la vista previa
+estaba todo completo.
+
+**Cómo se detectó.** Por lo que NO fallaba: ninguna línea se pasaba de 42
+columnas —hay pruebas que lo vigilan— y el ancho medido daba exacto. Si el
+texto entra en el papel y aun así se corta, lo que no coincide no es el texto:
+es el papel. El área que un rollo de 80 mm imprime de verdad son unos 72 mm,
+centrados; con 3 mm de margen el vale ocupaba de 3 a 77 mm, y todo lo que
+pasaba de 76 caía fuera.
+
+**Por qué importa.** Un vale con el total cortado no sirve como comprobante, y
+el error es silencioso: en pantalla se ve perfecto y nada avisa.
+
+**Qué se hizo.** `margen()` pasó de 3 mm a **5.5 mm** en 80 mm y **4.5 mm** en
+58 mm. No se toca el tamaño de la letra a mano: al achicarse el ancho útil, el
+ajuste automático de `documento.ts` la recalcula solo. El vale además queda
+centrado en el rollo, que es como se veía en el diseño viejo.
+
+---
+
 ## Cómo agregar una trampa acá
 
 1. **Qué pasó** — el síntoma, tal como se vio.

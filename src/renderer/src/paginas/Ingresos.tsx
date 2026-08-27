@@ -25,6 +25,7 @@ import {
   CampoPrecio,
   ComboArticulo,
   Etiqueta,
+  POR_PAGINA,
   Selector,
   SelectorUnidad,
   SpinNumero,
@@ -325,7 +326,9 @@ export function PaginaIngresos({ extra }: { extra: DestinoExtra | null }): React
           alDobleClic={(i) => setViendo(i.id)}
           vacio={{ titulo: 'Todavía no hay boletas registradas', detalle: 'Cargá la primera con el formulario de arriba.' }}
           sinResultados={texto ? { titulo: 'Ningún ingreso coincide', detalle: 'Probá con otro número o proveedor.' } : undefined}
-          alto="max-h-[340px]"
+          // Paginado en vez de alto fijo: el historial crece sin techo y con
+          // los años la tabla entera se volvía pesada de dibujar.
+          porPagina={POR_PAGINA}
         />
       </Caja>
 

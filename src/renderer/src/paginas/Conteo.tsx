@@ -28,6 +28,7 @@ import {
   Campo,
   Chips,
   Etiqueta,
+  POR_PAGINA,
   Selector,
   Tabla,
   Tarjeta,
@@ -264,6 +265,9 @@ export function PanelConteo(): React.JSX.Element {
             ? { titulo: 'Ningún artículo coincide', detalle: 'Probá con otra palabra u otro filtro.' }
             : undefined
         }
+        // Lo contado se guarda por id en `contado`, no en la fila: cambiar de
+        // página NO pierde lo que ya se escribió.
+        porPagina={POR_PAGINA}
       />
 
       <div className="flex flex-wrap items-center gap-3">
