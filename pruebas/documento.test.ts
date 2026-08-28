@@ -2,10 +2,12 @@
  * El documento HTML que se manda a la impresora.
  *
  * Es texto puro, así que se puede revisar sin abrir ninguna ventana. Lo que
- * vigilan estas pruebas es el CENTRADO, que fue un error real: el vale se
- * ubicaba con un relleno fijo de 5.5 mm a la izquierda, y como la hoja que da
- * el controlador no siempre mide lo que dice el papel, el ticket salía pegado
- * a un costado con todo el sobrante del otro.
+ * vigilan estas pruebas es que el vale se ubique SIEMPRE contra el borde
+ * izquierdo de la hoja, con un ancho fijo. Fue un error real y caro: se probó
+ * centrarlo con `margin: 0 auto` para repartir el sobrante del papel, y como
+ * el vale se manda sin pedirle medida a la impresora, la hoja que arma
+ * Chromium es CARTA (216 mm). Centrado ahí, el ticket arrancaba fuera del
+ * rollo de 80 mm y salían impresos tres caracteres por línea. Ver TRAMPA 28.
  * ------------------------------------------------------------------------- */
 import { describe, expect, it } from 'vitest';
 
@@ -23,26 +25,34 @@ function ticket(anchoMm: number, extra: Record<string, unknown> = {}): string {
   });
 }
 
-describe('centrado del vale en el papel', () => {
-  it('el bloque del ticket se centra, no se empuja con relleno', () => {
-    const html = ticket(80);
-    expect(html).toContain('margin: 0 auto');
-    // El relleno de los costados tiene que ser cero: si volviera, el ticket
-    // quedaría corrido en cuanto la hoja no midiera los 80 mm nominales.
-    expect(html).toContain('padding: 5.5mm 0');
+describe('de qué borde arranca el vale', () => {
+  it('el vale NUNCA se centra en la hoja', () => {
+    // `margin: 0 auto` reparte el sobrante de la hoja, y la hoja no es el
+    // papel: con una hoja carta el vale se iba afuera del rollo.
+    expect(ticket(80)).not.toContain('margin: 0 auto');
+    expect(ticket(58)).not.toContain('margin: 0 auto');
   });
 
-  it('el bloque mide el ancho util, no el del papel', () => {
+  it('el relleno del papel va a los cuatro costados, no solo arriba y abajo', () => {
+    expect(ticket(80)).toContain('padding: 5.5mm;');
+    expect(ticket(58)).toContain('padding: 4.5mm;');
+  });
+
+  it('el cuerpo mide el ancho util, mida lo que mida la hoja', () => {
     for (const mm of [80, 58] as const) {
-      expect(ticket(mm)).toContain(`width: ${mm - margen(mm) * 2}mm`);
+      // Ancho fijo en el body: así el vale ocupa siempre lo mismo, aunque
+      // Chromium arme una hoja carta de 216 mm.
+      expect(ticket(mm)).toMatch(
+        new RegExp(`body\\s*\\{[^}]*width:\\s*${mm - margen(mm) * 2}mm`),
+      );
     }
   });
 
-  it('el ancho del papel solo se simula EN PANTALLA', () => {
-    const html = ticket(80);
-    // Al imprimir manda la hoja del controlador: no se le fija ningún ancho.
-    expect(html).toContain('@media screen { body { width: 80mm; } }');
-    expect(html).not.toMatch(/\n\s*body\s*\{[^}]*width:\s*80mm/);
+  it('el ancho del papel no se declara en ningun lado', () => {
+    // Ni al imprimir ni en pantalla: el ancho que se fija es el ÚTIL, y los
+    // milímetros del margen los pone el relleno.
+    expect(ticket(80)).not.toContain('@media screen');
+    expect(ticket(80)).not.toMatch(/width:\s*80mm/);
   });
 });
 

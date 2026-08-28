@@ -27,6 +27,7 @@ import {
   estadoStock,
   fmtNum,
   fmtPrecio,
+  usarConfirmacion,
   useDebounce,
 } from '../ui/base';
 
@@ -41,6 +42,7 @@ export function PaginaStock({
   extra: DestinoExtra | null;
 }): React.JSX.Element {
   const { pedir, avisar, refrescarTodo, refrescos } = useApp();
+  const { pedir: confirmar, nodo: dlgConfirmar } = usarConfirmacion();
   const [seccion, setSeccion] = useState<Seccion>('articulos');
   const [texto, setTexto] = useState('');
   const busqueda = useDebounce(texto);
@@ -100,6 +102,37 @@ export function PaginaStock({
     ]);
     const r = await pedir(window.sfida.reportes.exportar('stock_actual', cabeceras, datos));
     if (r) avisar(`Archivo guardado: ${r}`, 'ok');
+  }
+
+  /**
+   * Da de baja el artículo seleccionado.
+   *
+   * No siempre borra: si el artículo tiene movimientos, el núcleo lo DESACTIVA
+   * para no romper el kardex. Por eso el botón se llama «Desactivar» y el
+   * mensaje cuenta cuál de las dos cosas pasó. Los desactivados se vuelven a
+   * habilitar desde Control Maestro → Artículos desactivados.
+   */
+  async function desactivar(id: number): Promise<void> {
+    const art = filas.find((f) => f.id === id);
+    const ok = await confirmar({
+      titulo: 'Desactivar el artículo',
+      texto:
+        `¿Desactivar «${art?.nombre ?? ''}» (${art?.codigo ?? ''})?\n\n` +
+        'Deja de aparecer en ingresos, egresos y en esta lista. Si ya tiene ' +
+        'movimientos NO se borra: se guarda desactivado para no perder el ' +
+        'historial, y se puede volver a activar desde Control Maestro.',
+    });
+    if (!ok) return;
+    const r = await pedir(window.sfida.articulos.eliminar(id));
+    if (r === null) return;
+    avisar(
+      r === 'eliminado'
+        ? 'El artículo no tenía movimientos: se borró.'
+        : 'Artículo desactivado. Podés volver a activarlo desde Control Maestro.',
+      'ok',
+    );
+    setSel(null);
+    refrescarTodo();
   }
 
   async function importar(): Promise<void> {
@@ -195,6 +228,7 @@ export function PaginaStock({
           <div className="flex-1" />
           <Boton tono="claro" onClick={() => conSeleccion((id) => setEditando(id))}>Editar</Boton>
           <Boton tono="ambar" onClick={() => conSeleccion((id) => setAjustando(id))}>Ajustar stock</Boton>
+          <Boton tono="rojo" onClick={() => conSeleccion((id) => void desactivar(id))}>Desactivar</Boton>
           <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'kardex', id }))}>Ver kardex</Boton>
           <Boton tono="claro" onClick={() => conSeleccion((id) => irA('reportes', { tipo: 'precios', id }))}>Ver precios</Boton>
           <Boton tono="claro" onClick={importar}>Importar de Excel</Boton>
@@ -223,6 +257,7 @@ export function PaginaStock({
           if (cambio) refrescarTodo();
         }}
       />
+      {dlgConfirmar}
     </div>
   );
 }

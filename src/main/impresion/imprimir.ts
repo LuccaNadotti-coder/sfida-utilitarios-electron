@@ -234,15 +234,18 @@ export async function imprimirVale(
 /**
  * Cuánto blanco queda a cada lado del vale en una hoja de `anchoHojaMm`.
  *
- * Es la comprobación del centrado, y hace falta porque el error no se veía en
- * la vista previa: ahí la hoja siempre mide lo que dice el papel. En la
- * impresora no. Por eso acá se **emula la impresión** (`media: print`, que es
- * cuando el `@media screen` deja de aplicar) sobre una hoja del ancho que se
- * pida, que es como reproducir un controlador que declara 74 mm para un rollo
- * de 80.
+ * Es la comprobación de que el vale arranca SIEMPRE a la misma distancia del
+ * borde izquierdo, mida lo que mida la hoja. Hace falta porque el error no se
+ * veía en la vista previa: ahí la hoja siempre mide lo que dice el papel, y en
+ * la impresora casi nunca. Por eso acá se **emula la impresión**
+ * (`media: print`) sobre una hoja del ancho que se pida, que es como
+ * reproducir un controlador que declara 74 mm para un rollo de 80 —o los
+ * 216 mm de una hoja carta, que es lo que Chromium usa cuando no se le pide
+ * ninguna medida (TRAMPA 28).
  *
- * Devuelve milímetros; si los dos números no son casi iguales, el ticket sale
- * corrido.
+ * Devuelve milímetros. `izquierdaMm` tiene que dar el margen del papel en los
+ * tres casos; si crece con la hoja, el vale se está centrando y se va a salir
+ * del rollo.
  */
 export async function medirMargenesLaterales(
   c: Comprobante,

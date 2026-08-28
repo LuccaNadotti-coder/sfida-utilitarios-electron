@@ -186,9 +186,10 @@ export function DlgImprimir({
                 <span>Cortar el papel justo donde termina el vale</span>
               </label>
               <p className="mt-1.5 text-[12px] text-suave">
-                Dejalo destildado si al imprimir queda mucho espacio en blanco arriba: casi
-                ninguna impresora acepta que le pidan el alto de la hoja, y cuando no lo
-                acepta manda el vale al medio del papel.
+                <b>Dejalo destildado.</b> Tildado, se le pide a la impresora una hoja del
+                alto exacto del vale; casi ninguna acepta esa medida y, cuando no la acepta,
+                manda el vale al medio del papel y queda mucho espacio en blanco arriba.
+                Tildalo solo si tu impresora corta el papel justo donde termina el vale.
               </p>
             </div>
           )}
@@ -217,9 +218,9 @@ export function DlgImprimir({
                 )}
               </div>
               <p className="mt-1.5 text-[12px] text-suave">
-                El vale sale centrado solo. Usá esto únicamente si el papel queda desparejo:
-                un número positivo lo mueve a la derecha y uno negativo, a la izquierda.
-                Se queda guardado para la próxima vez.
+                El vale arranca solo al costado izquierdo del papel. Usá esto únicamente si
+                queda desparejo: un número positivo lo mueve a la derecha y uno negativo, a
+                la izquierda. Se queda guardado para la próxima vez.
               </p>
             </div>
           )}
@@ -259,16 +260,16 @@ export function DlgImprimir({
                 style={{
                   zoom,
                   width: `${previa.anchoMm}mm`,
-                  // A los costados no va relleno: el vale se centra, igual que
-                  // en el papel. Si se pusiera relleno fijo acá, la vista
-                  // previa mentiría justo sobre lo que se está mirando.
-                  padding: `${previa.margenMm}mm 0`,
+                  // El MISMO relleno del documento que se imprime: el vale se
+                  // pega al borde izquierdo del papel, no se centra en la
+                  // hoja. Si acá se centrara, la vista previa mentiría justo
+                  // sobre lo que se está mirando.
+                  padding: `${previa.margenMm}mm`,
                 }}
               >
                 <div
                   style={{
                     width: `${previa.utilMm}mm`,
-                    margin: '0 auto',
                     // La MISMA letra del documento que se imprime. Si se deja
                     // la del programa, el ticket mide otra cosa acá que en el
                     // papel y la vista previa deja de servir justo para lo

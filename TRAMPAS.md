@@ -349,6 +349,66 @@ Para el resto —una impresora cuyo cabezal no imprima centrado— queda el ajus
 **«Correr el vale a los costados»** en la ventana de imprimir, en milímetros y
 guardado en `config`.
 
+> **Esta solución estuvo MAL y se dio marcha atrás.** Lo que sigue en la trampa
+> 28 explica por qué. El síntoma que se quería arreglar era real; el arreglo
+> rompía algo mucho peor.
+
+---
+
+## v5.2.1
+
+### 28. Centrar el vale lo mandó afuera del rollo: la hoja NO es el papel
+
+**Qué pasó.** Con la casilla «Cortar el papel justo donde termina el vale»
+**destildada** —que es como tiene que estar— el vale salía **cortado a lo
+ancho**: de cada línea se imprimían los tres o cuatro primeros caracteres y
+nada más. Se leía `EGR`, `N°`, `FEC`, `DES`, `TOT`, y el resto era papel en
+blanco. Tildándola el vale salía entero, pero con media hoja en blanco arriba
+(la trampa 9 de siempre). Ninguna de las dos opciones servía.
+
+**Cómo se detectó.** Por la cuenta, no por el código. Si el ticket mide 69 mm
+y del papel solo salen los primeros ~3 mm de cada línea, el vale no está
+arrancando en el milímetro 5.5: está arrancando cerca del 73. Y 73 es
+exactamente `(216 − 69) / 2`. **216 mm es el ancho de una hoja CARTA**, que es
+el tamaño con el que Chromium arma la página cuando no se le pide ninguna
+medida a la impresora.
+
+Ese «no pedir medida» es justo lo que hace la trampa 9 para que el vale empiece
+arriba de todo. O sea: las trampas 9 y 27 juntas se anulaban. La 9 dice «no
+declares la hoja»; la 27 centraba el vale **dentro de esa hoja que nadie
+declaró**, que resultó ser carta. El vale quedaba centrado en una hoja
+imaginaria de 216 mm, y el rollo de 80 mm solo imprimía su borde izquierdo.
+
+La confirmación fue empírica: `medirMargenesLaterales()` sobre una hoja de
+216 mm devolvía `izq = 73.50`.
+
+**Por qué importa.** El vale es el comprobante que firma quien recibe la
+mercadería. Impreso a tres caracteres por línea no es nada. Y es el peor tipo
+de error: la vista previa lo mostraba perfecto, porque ahí la hoja siempre
+mide lo que dice el papel.
+
+**Qué se hizo.** Se volvió al planteo de la v5.1, que era el correcto:
+`body { width: <ancho útil>mm; padding: <margen>mm }`, el vale **pegado al
+borde izquierdo** de la hoja, sin `margin: 0 auto` y sin `@media screen`. Así
+no importa cuánto mida la hoja —80, 74 o los 216 de una carta—: el vale
+arranca siempre al margen del papel.
+
+La verificación cambió de pregunta. Antes exigía que los dos costados quedaran
+iguales, y esa pregunta solo tiene sentido si la hoja es el papel. Ahora
+`npm run verificar:impresion` emula la impresión sobre hojas de **216**, 80, 74
+y 72 mm y exige que el vale arranque a 5.5 mm del borde izquierdo **en las
+cuatro**. La de 216 mm es la que importa: es la que se estaba imprimiendo de
+verdad.
+
+Para la impresora cuyo cabezal no imprima centrado sigue estando **«Correr el
+vale a los costados»**, que es un ajuste explícito, en milímetros, que decide
+quien está mirando el papel. Adivinar el centro desde el código fue el error.
+
+**La lección, que sirve fuera de esto:** centrar es *repartir el sobrante de un
+contenedor*, así que solo se puede centrar contra algo cuya medida se conoce.
+Cuando la medida la pone otro —el controlador de la impresora, acá— anclar a un
+borde es correcto y centrar es adivinar.
+
 ---
 
 ## Cómo agregar una trampa acá

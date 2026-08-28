@@ -9,6 +9,20 @@
  * el tamaño de letra hasta que entre. NO se puede fijar: 42 caracteres a 10 pt
  * no entran en 74 mm, y cada PC tiene fuentes distintas. Es la misma lección
  * que en Qt, pero acá la medición es exacta.
+ *
+ * EL VALE SE PEGA AL BORDE IZQUIERDO DE LA HOJA, con `body { width; padding }`.
+ * Nunca con `margin: 0 auto` (TRAMPA 28). Centrar quiere decir «repartir el
+ * sobrante de la hoja», y la hoja no siempre es el papel: cuando el vale se
+ * manda sin pedirle ninguna medida a la impresora —que es como se evita el
+ * espacio en blanco de arriba, TRAMPA 9— Chromium arma la página con su tamaño
+ * por omisión, que es CARTA, 216 mm de ancho. Centrado ahí, el vale de 69 mm
+ * arrancaba en el milímetro 73, o sea afuera del rollo de 80 mm: del ticket
+ * salían impresos los tres primeros caracteres de cada línea y nada más.
+ *
+ * Pegado a la izquierda no importa cuánto mida la hoja: el vale arranca siempre
+ * al margen del papel. Para las impresoras cuyo cabezal no imprime centrado
+ * está el ajuste «Correr el vale a los costados», que es explícito y lo maneja
+ * quien está mirando el papel.
  * ------------------------------------------------------------------------- */
 import { COLUMNAS, margen } from './ticket';
 
@@ -64,9 +78,7 @@ export function documentoVale(op: OpcionesDocumento): string {
     modoMargen === 'css'
       ? `@page { ${tamano}margin: ${margenMm}mm; }`
       : `@page { ${tamano}margin: 0; }`;
-  // El margen de arriba y abajo, nada más: el de los costados ya no se pone
-  // como relleno fijo, sale del centrado (ver más abajo).
-  const rellenoVertical = modoMargen === 'css' ? '0' : `${margenMm}mm`;
+  const relleno = modoMargen === 'css' ? '0' : `${margenMm}mm`;
 
   // El corrimiento viaja INLINE para que también se vea en la vista previa de
   // la pantalla, que recibe solo el `outerHTML` de este elemento.
@@ -88,25 +100,11 @@ export function documentoVale(op: OpcionesDocumento): string {
 <style>
   ${reglaPagina}
   html, body { margin: 0; padding: 0; background: #fff; }
-  /* Solo arriba y abajo: a los costados el aire lo pone el centrado. */
-  body { padding: ${rellenoVertical} 0; }
-  /*
-   * EN PANTALLA el papel se simula con su ancho nominal, para que la foto de
-   * verificación y la vista previa se parezcan al papel de verdad.
-   *
-   * AL IMPRIMIR no se fija ningún ancho: el body ocupa la hoja que dé el
-   * controlador y el vale se centra en ELLA. Esto es lo que arregla el ticket
-   * desparejo: el ancho de la hoja del controlador no siempre es el nominal
-   * (un rollo de «80 mm» suele declarar 72 a 76), y con un relleno fijo de
-   * 5.5 mm a la izquierda el ticket quedaba pegado a un costado, con todo el
-   * sobrante del otro lado. Centrado, la diferencia se reparte sola.
-   */
-  @media screen { body { width: ${anchoMm}mm; } }
+  /* Ancho fijo y pegado al borde izquierdo. Nunca centrado: ver TRAMPA 28. */
+  body { padding: ${relleno}; width: ${utilMm}mm; }
   #hoja {
     color: #000;
-    width: ${utilMm}mm;
-    max-width: 100%;
-    margin: 0 auto;
+    margin: 0;
     ${
       esA4
         ? "font-family: Arial, Helvetica, sans-serif; font-size: 10pt;"
