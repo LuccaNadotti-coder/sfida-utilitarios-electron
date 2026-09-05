@@ -7,6 +7,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import { buscarArticulos } from '../../../compartido/busqueda';
 import { CURVA, NORMAL, RAPIDO, RESORTE, cascada, useAnimaciones } from '../estado/animaciones';
 
 /* ------------------------------------------------------------------ texto */
@@ -895,19 +896,13 @@ export function ComboArticulo({
     return () => window.removeEventListener('mousedown', h);
   }, []);
 
-  const sinTildes = (s: string): string =>
-    s.normalize('NFD').replace(/\p{Mn}/gu, '').toUpperCase();
-
-  const filtradas = useMemo(() => {
-    const palabras = sinTildes(texto).split(/\s+/).filter(Boolean);
-    if (palabras.length === 0) return articulos.slice(0, 60);
-    return articulos
-      .filter((a) => {
-        const blob = sinTildes(`${a.codigo} ${a.nombre} ${a.unidad}`);
-        return palabras.every((p) => blob.includes(p));
-      })
-      .slice(0, 60);
-  }, [articulos, texto]);
+  // La búsqueda vive en `compartido/busqueda.ts` para poder probarla. Tolera
+  // palabras cortadas, plurales y una letra mal tipeada, y cuando con todo lo
+  // escrito no queda nada muestra los más parecidos en vez de una lista vacía.
+  const { filas: filtradas, aproximada } = useMemo(
+    () => buscarArticulos(articulos, texto),
+    [articulos, texto],
+  );
 
   return (
     <div ref={caja} className="relative">
@@ -929,6 +924,11 @@ export function ComboArticulo({
         <div className="absolute top-full right-0 left-0 z-40 mt-1 max-h-[260px] overflow-auto rounded-lg border border-borde bg-white py-1 shadow-xl">
           {filtradas.length === 0 && (
             <div className="px-3 py-2.5 text-[13px] text-suave">Ningún artículo coincide.</div>
+          )}
+          {aproximada && filtradas.length > 0 && (
+            <div className="px-3 py-1.5 text-[12px] font-semibold text-suave">
+              Ninguno tiene todo lo que escribió. Los más parecidos:
+            </div>
           )}
           {filtradas.map((a) => (
             <button

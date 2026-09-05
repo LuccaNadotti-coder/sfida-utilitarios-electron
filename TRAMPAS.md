@@ -411,6 +411,44 @@ borde es correcto y centrar es adivinar.
 
 ---
 
+### 29. Un buscador que exige TODAS las palabras se apaga justo cuando más se escribe
+
+**Qué pasó.** En el combo de artículos de ingresos y egresos, al escribir dos o
+tres palabras salían las sugerencias, pero al escribir el nombre completo la
+lista se vaciaba. Desde la pantalla parecía que la búsqueda inteligente
+funcionaba «hasta que el texto llenaba el renglón» y ahí se apagaba sola.
+
+**Cómo se detectó.** El síntoma señalaba al ancho del campo, que no tiene nada
+que ver. La pista real estaba en el filtro:
+
+```ts
+palabras.every((p) => blob.includes(p))   // TODAS, y tal cual
+```
+
+Es un **AND**: cada palabra nueva solo puede sacar artículos de la lista, nunca
+sumar. Con dos palabras es casi imposible fallar; con siete, basta que una sola
+no esté escrita igual que en la base —«ARCHIVADOR **DE** LOMO ANCHO», un
+plural, una letra de más— para que el resultado sea cero. La correlación con el
+ancho del renglón era pura coincidencia: los dos dependen de cuánto se escribió.
+
+**Por qué importa.** Quien carga la mercadería escribe el nombre completo
+porque cree que así afina la búsqueda, y obtiene lo contrario: nada. Y el
+programa no puede explicar por qué, porque «ningún artículo coincide» es cierto
+y a la vez inútil.
+
+**Qué se hizo.** El filtro pasó a ser un **puntaje** (`compartido/busqueda.ts`):
+se aceptan palabras cortadas por la mitad, plurales y una letra mal tipeada en
+las palabras largas; los números nunca se perdonan, porque «75 GR» y «70 GR»
+son artículos distintos. Y cuando con todo lo escrito no queda nada, se
+muestran los que **más** palabras cumplen, con el rótulo «Los más parecidos»:
+una aproximación avisada es útil, una lista vacía no.
+
+**La lección:** en un buscador, cada palabra que se escribe tiene que poder
+*ordenar mejor* el resultado, no solo descartarlo. Un AND estricto castiga
+escribir más, que es exactamente lo contrario de lo que la persona espera.
+
+---
+
 ## Cómo agregar una trampa acá
 
 1. **Qué pasó** — el síntoma, tal como se vio.

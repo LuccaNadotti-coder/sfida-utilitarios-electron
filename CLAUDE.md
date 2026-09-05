@@ -17,7 +17,7 @@ Es la reescritura en Electron de la versión Python + PySide6 que está en
 ```bash
 npm install                  # verifica que better-sqlite3 cargue en Electron
 npm run dev                  # la app, con recarga en caliente
-npm test                     # 265 pruebas de lógica, sin abrir ninguna ventana
+npm test                     # 278 pruebas de lógica, sin abrir ninguna ventana
 npm run typecheck            # TypeScript en los tres procesos
 npm run demo                 # crea datos/sfida_demo.db con datos de ejemplo
 npm run capturas             # capturas de las 7 pantallas en 1366×768 y 1920×1080
@@ -263,6 +263,15 @@ respuesta honesta, el ticket cae en la unidad de stock, que nunca miente.
 - `listarStock()` filtra **en memoria con `coincide()`**: no distingue tildes ni
   mayúsculas. Es la que usa el buscador de la pantalla de stock.
 
+**El combo de artículos (ingresos, egresos, reportes) no usa ninguna de las
+dos**: usa `buscarArticulos()` de `compartido/busqueda.ts`, que **puntúa en vez
+de filtrar**. Tolera palabras cortadas, plurales y una letra mal tipeada en
+palabras de 4 letras o más, y **nunca** en las que llevan dígitos («75 GR» y
+«70 GR» son artículos distintos). Si con todas las palabras no queda nada,
+devuelve los que más palabras cumplen con `aproximada: true` y la pantalla lo
+rotula «Los más parecidos». El AND estricto de antes se apagaba justo al
+escribir el nombre completo: trampa 29.
+
 ---
 
 ## Impresión de los vales
@@ -462,7 +471,7 @@ decisión.
 
 ## El registro de trampas
 
-`TRAMPAS.md` tiene 28 entradas, cada una con **cómo se detectó**. Esa parte
+`TRAMPAS.md` tiene 29 entradas, cada una con **cómo se detectó**. Esa parte
 suele ser más útil que la solución. Si encontrás algo que falló de una forma
 que no se parecía al problema real, o que funcionó dando un resultado falso,
 sumalo ahí.
